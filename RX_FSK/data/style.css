@@ -246,6 +246,33 @@ h1{
 :disabled.save {
   opacity: 0.5;
 }
+/* Footer backup/restore icon buttons on the qrg/config forms */
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bkpbtns {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #04AA6D;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 12px;
+  font-size: 18px;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+.iconbtn:hover { background-color: #038f5b; }
 .save {
   background-color: #CC1111; /* 0F33C6; */
   border: white;

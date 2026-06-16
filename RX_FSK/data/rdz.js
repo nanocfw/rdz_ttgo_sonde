@@ -47,6 +47,43 @@ function footer() {
   }); 
 }
 
+/* Upload a local file to LittleFS, forcing its on-device name (e.g. qrg.txt / config.txt),
+   then reboot so the device re-reads it. Used by the qrg.html and config.html forms in
+   RX_FSK.ino. 'what' is a human description used in the confirmation prompt.
+   Relies on showAlert()/showConfirm() from dialog.js (loaded by both forms). */
+function uploadCfgFile(inputId, dest, what) {
+  var inp = document.getElementById(inputId);
+  if (!inp || !inp.files || inp.files.length === 0) {
+    showAlert("Please choose a file first.");
+    return;
+  }
+  var f = inp.files[0];
+  showConfirm("This will replace the entire " + what + " on the device with the contents of \"" +
+              f.name + "\".\n\nThe device will reboot to apply the change. Continue?")
+    .then(function (ok) {
+      if (!ok) return;
+      var fd = new FormData();
+      fd.append("file", f, dest);   // force the destination filename regardless of the picked file's name
+      return fetch("/file", { method: "POST", body: fd })
+        .then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return showAlert("Upload complete. The device will now reboot to apply " + dest +
+                           ".\n\nThis page reloads automatically once it is back.");
+        })
+        .then(function () {
+          // Trigger the reboot; the device restarts immediately, so this request won't get a response.
+          fetch("/control.html", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: "reboot=1"
+          }).catch(function () {});
+          // Give the device time to reboot and rejoin WiFi, then reload to pick up the new state.
+          setTimeout(function () { (window.top || window).location.reload(); }, 15000);
+        })
+        .catch(function (e) { showAlert("Upload failed: " + e.message); });
+    });
+}
+
 /* Used by qrg.html in RX_FSK.ino */
 function prep() {
   var stlist=document.querySelectorAll("input.stype");

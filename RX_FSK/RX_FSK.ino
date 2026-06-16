@@ -393,14 +393,53 @@ void HTMLBODYEND(char *ptr) {
 // Render the form footer. The "Save changes" submit button is emitted only for level-2
 // (admin) viewers; level-1 users may view these forms but cannot save, so hiding the button
 // matches the server-side POST guard (which still enforces it regardless).
-void HTMLSAVEBUTTON(char *ptr, int level) {
-  strcat(ptr, "</div><div class=\"footer\">");
+// footerextra (admin-only) is injected into the footer between the Save button and the version
+// info -- used by the qrg/config forms for their backup/restore icon buttons.
+void HTMLSAVEBUTTON_F(char *ptr, int level, const char *footerextra) {
+  // footer-left groups the Save button with the (optional) backup/restore buttons so they sit
+  // next to each other on the left; the version info stays on the right (footer is space-between).
+  strcat(ptr, "</div><div class=\"footer\"><div class=\"footer-left\">");
   if(level >= 2)
     strcat(ptr, "<input type=\"submit\" class=\"save\" value=\"Save changes\"/>");
-  strcat(ptr, "<span class=\"ttgoinfo\">rdzTTGOserver ");
+  if(level >= 2 && footerextra)
+    strcat(ptr, footerextra);
+  strcat(ptr, "</div><span class=\"ttgoinfo\">rdzTTGOserver ");
   strcat(ptr, version_id);
   strcat(ptr, "</span>");
 }
+void HTMLSAVEBUTTON(char *ptr, int level) { HTMLSAVEBUTTON_F(ptr, level, NULL); }
+
+// Custom inline SVG icons (stroke uses currentColor -> inherits the button's white text colour).
+// Backup = arrow-into-tray (download); restore = arrow-out-of-tray (upload).
+#define SVG_BACKUP "<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" " \
+  "stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" \
+  "<path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/>" \
+  "<polyline points=\"7 10 12 15 17 10\"/><line x1=\"12\" y1=\"15\" x2=\"12\" y2=\"3\"/></svg>"
+#define SVG_RESTORE "<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" " \
+  "stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" \
+  "<path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/>" \
+  "<polyline points=\"17 8 12 3 7 8\"/><line x1=\"12\" y1=\"3\" x2=\"12\" y2=\"15\"/></svg>"
+
+// Footer backup/restore controls for the qrg/config forms: a download (backup) link and an upload
+// (restore) button, both icon-only with hover tooltips. The upload button opens a hidden file
+// picker; selecting a file calls uploadCfgFile() (rdz.js), which confirms, uploads with the forced
+// destination name, then reboots. Download is served by GET /file (level-2 auth).
+const char *QRG_BACKUP_FOOTER =
+  "<input type=\"file\" id=\"qrgupl\" accept=\".txt\" style=\"display:none\" "
+    "onchange=\"uploadCfgFile('qrgupl','qrg.txt','frequency list')\">"
+  "<span class=\"bkpbtns\">"
+    "<a class=\"iconbtn\" href=\"/file/qrg.txt\" download=\"qrg.txt\" title=\"Download backup (qrg.txt)\">" SVG_BACKUP "</a>"
+    "<button type=\"button\" class=\"iconbtn\" title=\"Restore from file (qrg.txt)\" "
+      "onclick=\"document.getElementById('qrgupl').click()\">" SVG_RESTORE "</button>"
+  "</span>";
+const char *CONFIG_BACKUP_FOOTER =
+  "<input type=\"file\" id=\"cfgupl\" accept=\".txt\" style=\"display:none\" "
+    "onchange=\"uploadCfgFile('cfgupl','config.txt','configuration')\">"
+  "<span class=\"bkpbtns\">"
+    "<a class=\"iconbtn\" href=\"/file/config.txt\" download=\"config.txt\" title=\"Download backup (config.txt)\">" SVG_BACKUP "</a>"
+    "<button type=\"button\" class=\"iconbtn\" title=\"Restore from file (config.txt)\" "
+      "onclick=\"document.getElementById('cfgupl').click()\">" SVG_RESTORE "</button>"
+  "</span>";
 
 const char *handleLoginPost(AsyncWebServerRequest * request) {
   LOG_D(TAG, "Handling login POST request");
@@ -538,7 +577,7 @@ const char *getQRGAsJson() {
 const char *createQRGForm(int level) {
   char *ptr = message;
   strcpy(ptr, HTMLHEAD);
-  strcat(ptr, "<script src=\"rdz.js\"></script></head>");
+  strcat(ptr, "<script src=\"rdz.js\"></script><script src=\"dialog.js\"></script></head>");
   HTMLBODY(ptr, "qrg.html");
   //strcat(ptr, "<body><form class=\"wrapper\" action=\"qrg.html\" method=\"post\"><div class=\"content\"><table><tr><th>ID</th><th>Active</th><th>Freq</th><th>Launchsite</th><th>Mode</th></tr>");
   strcat(ptr, "<script>\nvar qrgs = [];\n");
@@ -550,7 +589,10 @@ const char *createQRGForm(int level) {
   strcat(ptr, "<div id=\"divTable\"></div>");
   strcat(ptr, "<script> qrgTable() </script>\n");
   //</div><div class=\"footer\"><input type=\"submit\" class=\"update\" value=\"Update\"/>");
-  HTMLSAVEBUTTON(ptr, level);
+  // Backup/restore icon buttons live in the footer (see QRG_BACKUP_FOOTER). The hidden file input
+  // has no name attribute, so it is never submitted with this page's Save form; picking a file
+  // triggers uploadCfgFile (rdz.js), which confirms, uploads as qrg.txt, then reboots.
+  HTMLSAVEBUTTON_F(ptr, level, QRG_BACKUP_FOOTER);
   HTMLBODYEND(ptr);
   LOG_D(TAG, "QRG form: size=%d bytes\n", strlen(message));
   return message;
@@ -1018,7 +1060,10 @@ const char *createConfigForm(int level) {
   }
   strcat(ptr, "configTable();\n </script>");
   strcat(ptr, "<script>footer()</script>");
-  HTMLSAVEBUTTON(ptr, level);
+  // Backup/restore icon buttons live in the footer (see CONFIG_BACKUP_FOOTER). The hidden file
+  // input has no name attribute, so it is never submitted with this page's Save form; picking a
+  // file triggers uploadCfgFile (rdz.js), which confirms, uploads as config.txt, then reboots.
+  HTMLSAVEBUTTON_F(ptr, level, CONFIG_BACKUP_FOOTER);
   HTMLBODYEND(ptr);
   LOG_D(TAG, "Config form: size=%d bytes\n", strlen(message));
   return message;
