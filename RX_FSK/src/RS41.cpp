@@ -529,7 +529,15 @@ static uint32_t rs41date(const uint8_t f[])
 
 void ProcessSubframe( byte *subframeBytes, int subframeNumber ) {
    // the total subframe consists of 51 rows, each row 16 bytes
-   // based on https://github.com/bazjo/RS41_Decoding/tree/master/RS41-SGP#Subframe 
+   // based on https://github.com/bazjo/RS41_Decoding/tree/master/RS41-SGP#Subframe
+   // subframeNumber comes straight from the (RS-corrected) frame and can be any
+   // value 0..255 on a malformed/garbage frame; rawData only holds 51 rows and
+   // valid is a 64-bit mask, so reject out-of-range numbers to avoid a heap
+   // buffer overflow and undefined-behaviour shift.
+   if( subframeNumber < 0 || subframeNumber >= 51 ) {
+      Serial.printf("ProcessSubframe: ignoring out-of-range subframe number %d\n", subframeNumber);
+      return;
+   }
    struct subframeBuffer *s = (struct subframeBuffer *)sonde.si()->extra;
    // Allocate on demand
    if(!s) {
