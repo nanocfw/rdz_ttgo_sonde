@@ -27,7 +27,15 @@
             const body = new URLSearchParams({ user: username, preauth: preauth, auth: auth });
             fetch('/login.html', { method: 'POST', body: body, credentials: 'same-origin' })
                 .then(resp => {
-                    if (resp.ok) { window.location.href = '/index.html'; return; }
+                    if (resp.ok) {
+                        // We just authenticated against the running firmware. Drop any stale
+                        // bootID so index.html's reboot-detection doesn't mistake the fresh
+                        // session cookie for a pre-reboot one and clear it (index.html will
+                        // record the current bootID itself on load).
+                        try { localStorage.removeItem('bootID'); } catch (e) {}
+                        window.location.href = '/index.html';
+                        return;
+                    }
                     return resp.text().then(msg => {
                         // A failed login does NOT consume the preauth nonce (it is only
                         // consumed on success), and it stays valid for ~60s -- so the user can
