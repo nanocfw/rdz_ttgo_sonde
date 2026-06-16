@@ -4,5 +4,7 @@
 # Level 2: Full access
 # first line (username/password empty): access without authentication
 # change first line to ",1," for requiring login for any config change etc.
+# No user accounts are defined by default: create your account from the "Users" tab.
+# User management is open only until the first account exists; after that it requires
+# logging in as a level-2 user.
 ,2,
-admin,2,admin

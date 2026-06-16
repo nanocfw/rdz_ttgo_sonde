@@ -240,3 +240,157 @@ int getDefaultAuthLevel() {
   return level;
 }
 
+// ---- User management (add/remove/list named users in /user.txt) ----
+
+#define MAX_USER_LINE 160
+
+// Return the username field (up to the first comma, trimmed) of a record line.
+// Writes into dst (size dstlen) and returns it. Empty string for comment/blank lines.
+static const char *lineUsername(const char *line, char *dst, int dstlen) {
+  strlcpy(dst, line, dstlen);
+  char *comma = strchr(dst, ',');
+  if(comma) *comma = 0;
+  return trimws(dst);
+}
+
+// Rewrite /user.txt via a temp file, applying one change to the record for `user`:
+//  - newline != NULL : replace the matching line, or append it if `user` was not present
+//  - newline == NULL : delete the matching line
+// Comment lines, blank lines and all other records are preserved verbatim.
+// Returns 1 if an existing record matched, 0 if appended/not-found, -1 on filesystem error.
+static int rewriteUserFile(const char *user, const char *newline) {
+  File in = LittleFS.open("/user.txt", "r");
+  File out = LittleFS.open("/user.tmp", "w");
+  if(!out) { if(in) in.close(); return -1; }
+  bool matched = false;
+  char line[MAX_USER_LINE];
+  char namebuf[MAX_USER_LINE];
+  if(in) {
+    while(in.available()) {
+      int n = readLine(in, line, MAX_USER_LINE);
+      if(n <= 0) continue;                       // drop blank lines
+      if(line[0] == '#') { out.printf("%s\n", line); continue; }  // keep comments
+      const char *uname = lineUsername(line, namebuf, MAX_USER_LINE);
+      if(strcmp(uname, user) == 0) {
+        matched = true;
+        if(newline) out.printf("%s\n", newline); // replace; for delete, write nothing
+      } else {
+        out.printf("%s\n", line);                // keep other records verbatim
+      }
+    }
+    in.close();
+  }
+  if(!matched && newline) out.printf("%s\n", newline);  // append new user
+  out.close();
+  LittleFS.remove("/user.txt");
+  if(!LittleFS.rename("/user.tmp", "/user.txt")) return -1;
+  return matched ? 1 : 0;
+}
+
+// Count named users with admin (level >= 2) access.
+static int countAdmins() {
+  File in = LittleFS.open("/user.txt", "r");
+  if(!in) return 0;
+  char line[MAX_USER_LINE];
+  int count = 0;
+  while(in.available()) {
+    int n = readLine(in, line, MAX_USER_LINE);
+    if(n <= 0 || line[0] == '#') continue;
+    char *c1 = strchr(line, ',');
+    if(!c1) continue;
+    *c1 = 0;
+    char *c2 = strchr(c1 + 1, ',');
+    if(!c2) continue;
+    *c2 = 0;
+    if(trimws(line)[0] == 0) continue;                 // skip the default entry
+    if((int)strtol(trimws(c1 + 1), NULL, 10) >= 2) count++;
+  }
+  in.close();
+  return count;
+}
+
+// Current access level of a named user, or -1 if not present.
+static int currentUserLevel(const char *user) {
+  char line[MAX_USER_LINE];
+  int level = -1;
+  if(!hasNamedUsers()) return -1;                       // no user file/records => treat as absent
+  const char *p = getUser(user, line, MAX_USER_LINE, &level);
+  return p ? level : -1;
+}
+
+// Add or update a named user.
+// Returns 0 on success, -1 on invalid input/error, -2 if it would demote the last administrator.
+int setUser(const char *user, int level, const char *password) {
+  if(!user || user[0] == 0 || !password) return -1;   // empty username = default entry, not managed here
+  if(level < 1 || level > 2) return -1;
+  // The first account must be an administrator, otherwise nobody could ever manage users again.
+  if(!hasNamedUsers()) level = 2;
+  // Don't allow demoting the last administrator (would lock out user management).
+  if(level < 2 && currentUserLevel(user) >= 2 && countAdmins() <= 1) return -2;
+  // The flat file is comma-separated and line-based: reject anything that would corrupt it.
+  if(strpbrk(user, ",\r\n") || strpbrk(password, ",\r\n")) return -1;
+  if(strchr(user, '"')) return -1;                    // keep JSON listing simple/safe
+  if(strlen(user) + strlen(password) + 8 >= MAX_USER_LINE) return -1;
+  char newline[MAX_USER_LINE];
+  snprintf(newline, MAX_USER_LINE, "%s,%d,%s", user, level, password);
+  return rewriteUserFile(user, newline) < 0 ? -1 : 0;
+}
+
+// Delete a named user.
+// Returns 0 if removed, -1 if not found or on error, -2 if it would remove the last administrator.
+int deleteUser(const char *user) {
+  if(!user || user[0] == 0) return -1;
+  // Don't allow removing the last administrator (would lock out user management).
+  if(currentUserLevel(user) >= 2 && countAdmins() <= 1) return -2;
+  return rewriteUserFile(user, NULL) == 1 ? 0 : -1;
+}
+
+// Build a JSON array of named users (passwords are never included): [{"user":"x","level":N},...]
+// Writes into out (size outlen) and returns the length written.
+int getUserListJson(char *out, int outlen) {
+  int len = snprintf(out, outlen, "[");
+  File in = LittleFS.open("/user.txt", "r");
+  char line[MAX_USER_LINE];
+  bool first = true;
+  if(in) {
+    while(in.available()) {
+      int n = readLine(in, line, MAX_USER_LINE);
+      if(n <= 0 || line[0] == '#') continue;
+      char *c1 = strchr(line, ',');
+      if(!c1) continue;
+      *c1 = 0;
+      char *c2 = strchr(c1 + 1, ',');
+      if(!c2) continue;
+      *c2 = 0;
+      char *uname = trimws(line);
+      if(uname[0] == 0) continue;               // skip the default (unauthenticated) entry
+      int lvl = (int)strtol(trimws(c1 + 1), NULL, 10);
+      if(len > outlen - 64) break;              // leave room; stop if buffer is nearly full
+      len += snprintf(out + len, outlen - len, "%s{\"user\":\"%s\",\"level\":%d}",
+                      first ? "" : ",", uname, lvl);
+      first = false;
+    }
+    in.close();
+  }
+  len += snprintf(out + len, outlen - len, "]");
+  return len;
+}
+
+// True if /user.txt contains at least one named (non-empty username) user record.
+// Used to decide whether the device is still in its "clean" bootstrap state.
+bool hasNamedUsers() {
+  File in = LittleFS.open("/user.txt", "r");
+  if(!in) return false;
+  char line[MAX_USER_LINE];
+  char namebuf[MAX_USER_LINE];
+  bool found = false;
+  while(in.available()) {
+    int n = readLine(in, line, MAX_USER_LINE);
+    if(n <= 0 || line[0] == '#') continue;
+    const char *uname = lineUsername(line, namebuf, MAX_USER_LINE);
+    if(uname[0] != 0) { found = true; break; }
+  }
+  in.close();
+  return found;
+}
+

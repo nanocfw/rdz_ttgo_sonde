@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+<div class="wrapper">
+ <div class="content">
+  <h2>User Management</h2>
+  <table id="userTable">
+    <tr><th>Username</th><th>Level</th><th></th></tr>
+  </table>
+
+  <h3>Add / update user</h3>
+  <p id="bootstrapNote" style="display:none; font-weight:bold;">
+    No accounts exist yet. The first account must be an administrator (level 2).
+    After it is created you will need to log in to continue managing users.
+  </p>
+  <form id="addForm">
+    <label>Username: <input type="text" id="u" required></label><br><br>
+    <label>Level:
+      <select id="l">
+        <option value="1">1 &ndash; read only</option>
+        <option value="2" selected>2 &ndash; full access</option>
+      </select>
+    </label><br><br>
+    <label>Password: <input type="password" id="p" required></label><br><br>
+    <button type="submit">Save</button>
+    <span id="msg" style="margin-left:1em;"></span>
+  </form>
+  <p><small>Note: an existing username is overwritten. Passwords are stored in <code>/user.txt</code>.
+     To change who can access without logging in, edit the first (empty-username) line of that file.</small></p>
+ </div>
+</div>
+
+<script>
+var userCount = 0;   // number of existing accounts (drives the "first user" bootstrap behaviour)
+
+function applyBootstrapMode() {
+  // When no accounts exist yet, the first one must be an admin (level 2): lock the selector.
+  const first = (userCount === 0);
+  const sel = document.getElementById('l');
+  sel.value = '2';
+  sel.disabled = first;
+  document.getElementById('bootstrapNote').style.display = first ? 'block' : 'none';
+}
+
+function loadUsers() {
+  fetch('/users.json').then(r => r.json()).then(list => {
+    userCount = list.length;
+    const t = document.getElementById('userTable');
+    t.innerHTML = '<tr><th>Username</th><th>Level</th><th></th></tr>';
+    list.forEach(u => {
+      const tr = document.createElement('tr');
+      const td1 = document.createElement('td'); td1.textContent = u.user;
+      const td2 = document.createElement('td'); td2.textContent = u.level;
+      const td3 = document.createElement('td');
+      const b = document.createElement('button');
+      b.textContent = 'Delete';
+      b.addEventListener('click', () => delUser(u.user));
+      td3.appendChild(b);
+      tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+      t.appendChild(tr);
+    });
+    applyBootstrapMode();
+  }).catch(() => { document.getElementById('msg').textContent = 'Failed to load users.'; });
+}
+
+function post(body) {
+  return fetch('/users.html', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body
+  });
+}
+
+function delUser(user) {
+  if (!confirm('Delete user "' + user + '"?')) return;
+  post('action=del&user=' + encodeURIComponent(user))
+    .then(r => r.text())
+    .then(t => {
+      document.getElementById('msg').textContent = (t === 'ok') ? 'Deleted.' : ('Error: ' + t);
+      loadUsers();
+    });
+}
+
+document.getElementById('addForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const wasFirst = (userCount === 0);   // creating the first account locks user management
+  const u = document.getElementById('u').value;
+  const l = wasFirst ? '2' : document.getElementById('l').value;
+  const p = document.getElementById('p').value;
+  post('action=add&user=' + encodeURIComponent(u) +
+       '&level=' + encodeURIComponent(l) +
+       '&pass=' + encodeURIComponent(p))
+    .then(r => r.text())
+    .then(t => {
+      if (t !== 'ok') {
+        document.getElementById('msg').textContent = 'Error: ' + t;
+        return;
+      }
+      document.getElementById('p').value = '';
+      if (wasFirst) {
+        // The device just locked down user management; the operator must now authenticate.
+        alert('Account "' + u + '" created as administrator.\n\n' +
+              'User management now requires logging in. You will be redirected to the login page.');
+        window.top.location.href = '/login.html';
+        return;
+      }
+      document.getElementById('msg').textContent = 'Saved.';
+      loadUsers();
+    });
+});
+
+loadUsers();
+</script>
+</body>
+</html>

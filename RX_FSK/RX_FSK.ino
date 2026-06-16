@@ -458,6 +458,45 @@ void handleLogout(AsyncWebServerRequest * request) {
   request->send(response);
 }
 
+// Guard for the user-management endpoints: open only while no users exist yet, so the first
+// user can be created on a clean device. Once any named user exists it requires a real
+// authenticated level-2 session -- the open default access level is intentionally NOT honored
+// here, so user management is locked down as soon as the first account is created.
+bool isUserMgmtAllowed(AsyncWebServerRequest * request) {
+  if(!hasNamedUsers()) return true;   // clean environment: allow creating the first user
+  char session[COOKIE_SIZE];
+  getSessionCookie(request, session, COOKIE_SIZE);
+  if(session[0] && getCookieAuthLevel(session) >= 2) return true;
+  AsyncWebServerResponse *response = request->beginResponse(302);
+  response->addHeader("Location", "/login.html");
+  request->send(response);
+  return false;
+}
+
+// Handle add/update/delete of named users (POST /users.html). Access checked by caller.
+void handleUsersPost(AsyncWebServerRequest * request) {
+  const AsyncWebParameter *actionp = request->getParam("action", true);
+  const AsyncWebParameter *userp = request->getParam("user", true);
+  if(!actionp || !userp) { request->send(400, "text/plain", "missing parameters"); return; }
+  String action = actionp->value();
+  String user = userp->value();
+  int res = -1;
+  if(action == "add") {
+    const AsyncWebParameter *levelp = request->getParam("level", true);
+    const AsyncWebParameter *passp = request->getParam("pass", true);
+    if(!levelp || !passp) { request->send(400, "text/plain", "missing parameters"); return; }
+    res = setUser(user.c_str(), levelp->value().toInt(), passp->value().c_str());
+  } else if(action == "del") {
+    res = deleteUser(user.c_str());
+  } else {
+    request->send(400, "text/plain", "unknown action");
+    return;
+  }
+  if(res == 0) request->send(200, "text/plain", "ok");
+  else if(res == -2) request->send(409, "text/plain", "cannot remove or demote the last administrator");
+  else request->send(400, "text/plain", "error");
+}
+
 const char *getQRGAsJson() {
   char *ptr = message;
   strcpy(ptr, "{\"channels\":[");
@@ -1535,6 +1574,20 @@ void SetupAsyncServer() {
   });
   server.on("/logout", HTTP_GET, [](AsyncWebServerRequest * request) {
     handleLogout(request);
+  });
+
+  server.on("/users.html", HTTP_GET, [](AsyncWebServerRequest * request) {
+    if(!isUserMgmtAllowed(request)) return;
+    request->send(LittleFS, "/users.html", String(), false, processor);
+  });
+  server.on("/users.json", HTTP_GET, [](AsyncWebServerRequest * request) {
+    if(!isUserMgmtAllowed(request)) return;
+    getUserListJson(message, sizeof(message));
+    request->send(200, "application/json", message);
+  });
+  server.on("/users.html", HTTP_POST, [](AsyncWebServerRequest * request) {
+    if(!isUserMgmtAllowed(request)) return;
+    handleUsersPost(request);
   });
 
   server.on("/file", HTTP_GET,  [](AsyncWebServerRequest * request) {

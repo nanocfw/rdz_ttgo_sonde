@@ -16,3 +16,9 @@ int getCookieAuthLevel(const char *cookie);
 int removeCookie(const char *cookie);
 int getUserPermissions(const char *user, const char *preauth, const char *auth);
 int getDefaultAuthLevel();
+
+// User management (named users in /user.txt)
+int setUser(const char *user, int level, const char *password);
+int deleteUser(const char *user);
+int getUserListJson(char *out, int outlen);
+bool hasNamedUsers();
