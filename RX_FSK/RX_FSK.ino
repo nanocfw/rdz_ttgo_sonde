@@ -417,14 +417,15 @@ void HTMLSAVEBUTTON(char *ptr, int level) { HTMLSAVEBUTTON_F(ptr, level, NULL); 
 
 // Custom inline SVG icons (stroke uses currentColor -> inherits the button's white text colour).
 // Backup = arrow-into-tray (download); restore = arrow-out-of-tray (upload).
+// Backup = "Save" (floppy disk); Restore = "Open" (folder) -- the classic save/open pairing.
 #define SVG_BACKUP "<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" " \
   "stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" \
-  "<path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/>" \
-  "<polyline points=\"7 10 12 15 17 10\"/><line x1=\"12\" y1=\"15\" x2=\"12\" y2=\"3\"/></svg>"
+  "<path d=\"M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z\"/>" \
+  "<polyline points=\"17 21 17 13 7 13 7 21\"/><polyline points=\"7 3 7 8 15 8\"/></svg>"
 #define SVG_RESTORE "<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" " \
   "stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" \
-  "<path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/>" \
-  "<polyline points=\"17 8 12 3 7 8\"/><line x1=\"12\" y1=\"3\" x2=\"12\" y2=\"15\"/></svg>"
+  "<path d=\"M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z\"/>" \
+  "<polyline points=\"9 13 12 10 15 13\"/><line x1=\"12\" y1=\"10\" x2=\"12\" y2=\"16\"/></svg>"
 
 // Footer backup/restore controls for the qrg/config forms: a download (backup) link and an upload
 // (restore) button, both icon-only with hover tooltips. The upload button opens a hidden file
@@ -817,7 +818,6 @@ const char *createStatusForm() {
   HTMLHEAD_V(ptr);
   strcat(ptr, "<meta http-equiv=\"refresh\" content=\"5\"></head>");
   HTMLBODY(ptr, "status.html");
-  strcat(ptr, "<div class=\"content\">");
 
   for (int i = 0; i < sonde.config.maxsonde; i++) {
     int snum = (i + sonde.currentSonde) % sonde.config.maxsonde;
@@ -825,6 +825,9 @@ const char *createStatusForm() {
       addSondeStatus(ptr, snum);
     }
   }
+  // Close the content div and emit the footer as a sibling (full width, pinned at the
+  // bottom) -- same structure as the other forms; the old extra nested .content put the
+  // footer inside the scroll area, so it scrolled and was constrained to the column width.
   strcat(ptr, "</div><div class=\"footer\"><span></span>"
          "<span class=\"ttgoinfo\">rdzTTGOserver ");
   strcat(ptr, version_id);

@@ -57,11 +57,11 @@ body, html {
 }
 .modal-btn:focus-visible {
 	outline: none;
-	box-shadow: 0 0 0 3px rgba(112, 102, 224, 0.5);
+	box-shadow: 0 0 0 3px rgba(4, 170, 109, 0.4);
 }
-.modal-btn-primary { background-color: #7066e0; }
-.modal-btn-primary:hover { background-color: #5f55d6; }
-.modal-btn-primary:active { background-color: #564dcc; }
+.modal-btn-primary { background-color: #04AA6D; }   /* project green accent */
+.modal-btn-primary:hover { background-color: #038f5b; }
+.modal-btn-primary:active { background-color: #037a4d; }
 .modal-btn-cancel { background-color: #6e7881; }
 .modal-btn-cancel:hover { background-color: #5f686f; }
 .modal-btn-cancel:active { background-color: #545c62; }
@@ -86,7 +86,11 @@ body, html {
     overflow-y: auto;
 }
 .system-info p {
-    margin: 8px 0;
+    margin: 10px 0;
+    font-size: 15px;
+    font-weight: normal;
+    line-height: 1.55;
+    color: #444;
 }
 .system-info h1 {
     font-size: 24px;
@@ -231,8 +235,7 @@ td#sfreq {
 
 html {
   font-family: Helvetica;
-  display: inline-block;
-  margin: 0px auto;
+  display: block;          /* was inline-block, which broke margin:0 auto centering of forms */
   text-align: left;
 }
 h1{
@@ -634,3 +637,105 @@ h1{
     background: grey !important;
   }
 }
+
+/* =========================================================================
+   Form layout -- center & constrain the config/qrg/wifi/users forms into a
+   readable column, and give their tables the same clean look as the Home
+   page status table. Scoped to .content / the forms, so Home, login and the
+   live map are untouched.
+   ========================================================================= */
+/* Center the ENTIRE content as one readable column, so the headings (h2/h3),
+   the table and the form all line up together -- not just the table.
+   Block flow (not flex) so margin:0 auto behaves; .content stays a flex *item*
+   of .wrapper (flex:1) so it still fills height and scrolls. */
+/* .content stays full width and is the SINGLE scroll area (fills remaining height
+   as a flex item of .wrapper; min-height:0 lets it shrink so only it scrolls --
+   no nested iframe + content double scrollbar, and the scrollbar sits at the page
+   edge rather than mid-page). */
+.content {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  overflow: auto;
+  padding: 24px 18px 36px;
+  box-sizing: border-box;
+}
+/* Center each top-level block into one readable column, so headings (h2/h3),
+   tables and the form all line up together within the full-width scroll area.
+   width:100% gives every page a consistent column width (otherwise QRG/Data,
+   whose content is short, shrink and look too small next to the dense Config). */
+.content > * {
+  width: 100%;
+  max-width: 820px;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
+/* Home page: center the whole panel into one readable column, so the title,
+   paragraphs, status table and links all line up at the same left edge. */
+.system-info {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 28px 18px;
+}
+.system-info h1 { text-align: center; margin-top: 0; }
+/* Table fills the centered column; styled like the Home status table.
+   margin auto centers it -- overrides table.stat's margin-left/right:0, which was
+   left-aligning the Data (status) tables. */
+.content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-left: auto;
+  margin-right: auto;
+}
+.content th, .content td {
+  padding: 9px 12px;
+  border: 1px solid #ccc;
+  text-align: left;
+  vertical-align: top;
+}
+.content th { background-color: #f4f4f4; font-weight: bold; color: #000; }
+/* Right-size the Value column of the 2-column config table so each label sits
+   next to its input instead of at the opposite edge of the screen */
+.cfgpanel td:last-child { width: 220px; }
+/* Inputs in a table cell fill the cell; fixed-size inputs keep their width */
+.content td input[type="text"],
+.content td input[type="password"],
+.content td select { width: 100%; box-sizing: border-box; }
+.content td input[size] { width: auto; }
+/* A little padding so fields are easier to click/fill (no color change) */
+.content input[type="text"],
+.content input[type="password"],
+.content input[type="number"],
+.content select { padding: 5px 7px; box-sizing: border-box; }
+/* The hand-written Add/update user form (users.html) */
+#addForm { max-width: 820px; margin: 0 auto; }
+#addForm input[type="text"], #addForm input[type="password"] { width: 16em; max-width: 100%; }
+
+/* Control page: a tidy centered stack of modern buttons. (They were plain grey
+   and, at font-size:4vh, overflowed the centered column and got clipped.) */
+.content .ctlbtn {
+  display: block;
+  width: 100%;
+  max-width: 440px;
+  box-sizing: border-box;
+  margin: 10px auto;
+  padding: 12px 18px;
+  font-size: clamp(15px, 3.4vh, 18px);
+  font-weight: 600;
+  text-align: center;
+  color: #fff;
+  background-color: #04AA6D;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition: background-color 0.15s, transform 0.03s;
+}
+.content .ctlbtn:hover { background-color: #038f5b; }
+.content .ctlbtn:active { transform: translateY(1px); }
+/* Destructive actions stand out in red */
+.content .ctlbtn[name="format"], .content .ctlbtn[name="reboot"] { background-color: #CC1111; }
+.content .ctlbtn[name="format"]:hover, .content .ctlbtn[name="reboot"]:hover { background-color: #b30f0f; }
