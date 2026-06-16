@@ -22,6 +22,17 @@
 		<span class="hamburger"></span>
 	</a>
 </div>
+<div class="usermenu" id="usermenu">
+	<button type="button" class="usermenu-btn" id="usermenuBtn" aria-haspopup="true" aria-expanded="false">
+		<svg class="usermenu-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+			<circle cx="12" cy="7.5" r="3.8" fill="currentColor"/>
+			<path d="M4.5 19.5c0-3.6 3.4-5.5 7.5-5.5s7.5 1.9 7.5 5.5v1h-15z" fill="currentColor"/>
+		</svg>
+		<span class="usermenu-name" id="usermenuName">Login</span>
+		<span class="usermenu-caret" aria-hidden="true"></span>
+	</button>
+	<div class="usermenu-dropdown" id="usermenuDropdown" role="menu"></div>
+</div>
 </div>
 
 <div id="Home" class="tabcontent">
@@ -61,7 +72,7 @@
  <a href="https://www.sondehub.org" target="_blank" class="button">sondehub.org</a>
 </div>
 </div>
-<div class="footer"><span class="ttgoinfo" id="userinfo"></span><span class="ttgoinfo">rdzTTGOserver %VERSION_ID%</span></div>
+<div class="footer"><span class="ttgoinfo">rdzTTGOserver %VERSION_ID%</span></div>
 
 </div>
 
@@ -179,19 +190,46 @@ if(prevID && prevID !== bootID) {
 }
 localStorage.setItem("bootID", bootID);
 
-const sessionC  = document.cookie.split("; ").find((row) => row.startsWith("SESSION="))?.split("=")[1];
-if(sessionC) {
-  const [user] = sessionC.split(':');
-  document.getElementById("userinfo").innerHTML = `User: ${user} <a href="#" id="logoutLink" style="margin-left: 10px; color: white;">Logout</a>`;
-  const logoutLink = document.getElementById("logoutLink");
-  logoutLink.addEventListener("click", function(event) {
-     event.preventDefault(); // Prevent default link behavior
-     document.cookie = `SESSION=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-     window.location.href = "/logout"; // Revoke the server-side session, then go to login page
-  });
-} else {
-  document.getElementById("userinfo").innerHTML = `<a style="color: white;" href="login.html">Login</a>`;
-}
+// Top-right user menu: a dropdown with Log out when signed in, or a direct Login link otherwise.
+(function() {
+  const menu = document.getElementById("usermenu");
+  const btn  = document.getElementById("usermenuBtn");
+  const name = document.getElementById("usermenuName");
+  const dd   = document.getElementById("usermenuDropdown");
+
+  const sessionC = document.cookie.split("; ").find((row) => row.startsWith("SESSION="))?.split("=")[1];
+  const user = sessionC ? decodeURIComponent(sessionC.split(":")[0]) : null;
+
+  function closeMenu() { menu.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); }
+
+  if (user) {
+    name.textContent = user;
+    const hdr = document.createElement("div");
+    hdr.className = "mi-header";
+    hdr.textContent = "Signed in as " + user;
+    const out = document.createElement("button");
+    out.type = "button"; out.className = "mi"; out.textContent = "Log out";
+    out.addEventListener("click", function() {
+      document.cookie = "SESSION=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      window.location.href = "/logout";   // revoke the server-side session, then show login
+    });
+    dd.appendChild(hdr);
+    dd.appendChild(out);
+
+    btn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      menu.classList.toggle("open");
+      btn.setAttribute("aria-expanded", menu.classList.contains("open") ? "true" : "false");
+    });
+    document.addEventListener("click", closeMenu);
+    document.addEventListener("keydown", function(e) { if (e.key === "Escape") closeMenu(); });
+  } else {
+    // Not logged in: no menu needed, the button is a direct link to the login page.
+    name.textContent = "Login";
+    menu.classList.add("usermenu-guest");
+    btn.addEventListener("click", function() { window.location.href = "/login.html"; });
+  }
+})();
 
 </script>
 

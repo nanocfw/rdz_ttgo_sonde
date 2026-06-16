@@ -86,6 +86,13 @@ def make_handler(root):
 
         def do_GET(self):
             path = self.path.split("?")[0]
+            if path == "/logout":
+                # Mirror the firmware: clear the session cookie and bounce to the login page.
+                self.send_response(302)
+                self.send_header("Location", "/login.html")
+                self.send_header("Set-Cookie", "SESSION=; Path=/; Max-Age=0")
+                self.end_headers()
+                return
             if path in MOCK_JSON:
                 self._send(200, "application/json", json.dumps(MOCK_JSON[path]))
                 return
