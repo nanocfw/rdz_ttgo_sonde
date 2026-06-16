@@ -86,7 +86,7 @@ body, html {
     overflow-y: auto;
 }
 .system-info p {
-    margin: 10px 0;
+    margin: 10px auto;   /* auto L/R so paragraphs stay centered in the full-width panel */
     font-size: 15px;
     font-weight: normal;
     line-height: 1.55;
@@ -673,18 +673,25 @@ h1{
   box-sizing: border-box;
 }
 
-/* Home page: center the whole panel into one readable column, so the title,
-   paragraphs, status table and links all line up at the same left edge. */
+/* Home page: the white panel is the full-width scroll area, so its vertical
+   scrollbar sits at the page's right edge like the other tabs (it used to be a
+   centered max-width box, which put the scrollbar mid-screen). The content is
+   centered into a readable column via .system-info > * instead. */
 .system-info {
-  max-width: 860px;
-  margin: 0 auto;
+  box-sizing: border-box;
+  min-width: 0;
   padding: 28px 18px;
+}
+.system-info > * {
+  width: 100%;
+  max-width: 860px;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
 }
 .system-info h1 { text-align: center; margin-top: 0; }
 /* Keep long URLs in the license text and long status strings from forcing a
-   horizontal scrollbar: let them wrap within the centered column instead.
-   overflow-wrap:anywhere also lets the status table shrink to the column width. */
-.system-info { box-sizing: border-box; min-width: 0; }
+   horizontal scrollbar: let them wrap within the column instead. */
 .system-info p, .system-info a,
 .status-table td, .status-table th { overflow-wrap: anywhere; }
 /* Table fills the centered column; styled like the Home status table.
