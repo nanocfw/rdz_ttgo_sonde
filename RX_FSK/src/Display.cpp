@@ -1122,6 +1122,12 @@ void Display::initFromFile(int index) {
 						LOG_I(TAG, "initFromFile: Illegal start of screen: %s\n", s);
 						continue;
 					}
+					// newlayouts only holds MAXSCREENS DispInfo entries; ignore
+					// any extra '@' screens to avoid writing past the buffer.
+					if(idx+1 >= MAXSCREENS) {
+						LOG_E(TAG, "initFromFile: too many screens (max %d), ignoring rest\n", MAXSCREENS);
+						continue;
+					}
 					char *label = strdup(s+1);
 					entrysize = countEntries(d);
 					LOG_D(TAG, "Reading entry with %d elements\n", entrysize);
