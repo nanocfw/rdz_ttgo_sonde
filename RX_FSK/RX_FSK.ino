@@ -693,7 +693,7 @@ void setupWifiList() {
   }
   int i = 0;
 
-  while (file.available()) {
+  while (file.available() && i < MAX_WIFI) {
     String line = readLine(file);  //file.readStringUntil('\n');
     if (!file.available()) break;
     networks[i].id = line;
