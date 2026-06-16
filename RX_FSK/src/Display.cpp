@@ -850,7 +850,15 @@ void Display::replaceLayouts(DispInfo *newlayouts, int nnew) {
 	// and release memory not used any more
 	if(old==staticLayouts) return;
 	for(int i=0; i<MAXSCREENS; i++) {
-		if(old[i].de) free(old[i].de);
+		if(old[i].de) {
+			// free the per-entry extra allocations (strdup/malloc'd StatInfo/
+			// CircleInfo) before freeing the DispEntry block itself.
+			for(DispEntry *de = old[i].de; de->func != NULL; de++) {
+				if(de->extra) free((void *)de->extra);
+			}
+			free(old[i].de);
+		}
+		if(old[i].label) free((void *)old[i].label);
 	}
 	free(old);
 }
@@ -1137,6 +1145,8 @@ void Display::initFromFile(int index) {
 					int res = allocDispInfo(entrysize, &newlayouts[idx], label);
 					if(res<0) {
 						LOG_E(TAG, "Error allocating memory for disp info");
+						free(label);  // allocDispInfo did not take ownership on failure
+						idx--;         // slot was not populated; reuse it
 						continue;
 					}
 					what = 0;
