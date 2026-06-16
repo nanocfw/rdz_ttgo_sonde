@@ -3488,7 +3488,8 @@ void execOTA() {
       // get header...
       char fn[128];
       fn[0] = '/';
-      client.readBytesUntil('\n', fn + 1, 128);
+      size_t fnlen = client.readBytesUntil('\n', fn + 1, sizeof(fn) - 2);
+      fn[1 + fnlen] = 0;   // readBytesUntil does not terminate; also keeps the write in bounds
       char *sz = strchr(fn, ' ');
       if (!sz) {
         client.stop();
