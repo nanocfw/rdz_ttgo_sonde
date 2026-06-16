@@ -117,7 +117,8 @@ const int   daylightOffset_sec = 0; //UTC
 
 // Authentication management
 // BootID is embedded in index.html so client can invalidate auth cookie after ttgo reboot
-// defaultUserLevel is read from user.txt
+// defaultUserLevel: anonymous (not-logged-in) access level, derived from user.txt --
+// full access until the first user is registered, then no access (see getDefaultAuthLevel)
 char bootid[8];
 uint8_t defaultUserLevel = 2;
 
@@ -560,8 +561,8 @@ void handleUsersPost(AsyncWebServerRequest * request) {
     return;
   }
   if(res == 0) {
-    // Creating the first user flips the unauthenticated default level (,2, -> ,0,) in user.txt.
-    // Re-read it so the lockdown takes effect immediately, without waiting for a reboot.
+    // Creating the first user closes anonymous access (getDefaultAuthLevel() returns 0
+    // once a user is registered). Re-read it so the lockdown takes effect immediately.
     defaultUserLevel = getDefaultAuthLevel();
     request->send(200, "text/plain", "ok");
   }

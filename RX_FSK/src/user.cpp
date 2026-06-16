@@ -240,13 +240,11 @@ static const char *getUser(const char *user, char *line, int maxlen, int *outLev
 }
 
 int getDefaultAuthLevel() {
-  char line[128];
-  int level = 2;
-  const char *ptr = getUser("", line, 128, &level);
-  // No explicit default line: lock anonymous access out (level 0) once any account exists,
-  // otherwise keep it open (level 2) so a fresh/empty device can still be set up.
-  if(!ptr) return hasNamedUsers() ? 0 : 2;
-  return level;
+  // Anonymous (not-logged-in) access is derived purely from whether any user is
+  // registered: full access (level 2) on a clean device with no users so it can be
+  // set up, and no access (level 0) once the first account exists -- from then on
+  // access is via login. There is no separate "default" entry in user.txt.
+  return hasNamedUsers() ? 0 : 2;
 }
 
 // ---- User management (add/remove/list named users in /user.txt) ----
@@ -344,10 +342,8 @@ int setUser(const char *user, int level, const char *password) {
   char newline[MAX_USER_LINE];
   snprintf(newline, MAX_USER_LINE, "%s,%d,%s", user, level, password);
   if(rewriteUserFile(user, newline) < 0) return -1;
-  // As soon as the first real account exists, close the wide-open default: set the
-  // empty-username default line to level 0 so unauthenticated clients lose config access.
-  // (Before this, a fresh device ships ",2," so initial setup is possible without login.)
-  if(firstUser) rewriteUserFile("", ",0,");
+  // No default entry to maintain: anonymous access closes automatically once a user
+  // exists, because getDefaultAuthLevel() returns 0 as soon as hasNamedUsers() is true.
   return 0;
 }
 
