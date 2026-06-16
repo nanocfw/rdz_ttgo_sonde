@@ -1105,7 +1105,9 @@ const char *handleConfigPost(AsyncWebServerRequest * request) {
   for (int i = 0; i < params; i++) {
     String strlabel = request->getParam(i)->name();
     const char *label = strlabel.c_str();
-    if (label[strlen(label) - 1] == '#') continue;
+    size_t labellen = strlen(label);
+    if (labellen == 0) continue;	// empty parameter name => label[-1] read
+    if (label[labellen - 1] == '#') continue;
     const AsyncWebParameter *value = request->getParam(label, true);
     if (!value) continue;
     String strvalue = value->value();
