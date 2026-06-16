@@ -1029,6 +1029,19 @@ void Display::parseDispElement(char *text, DispEntry *de)
 			LOG_W(TAG, "parseDispElement: unknown: %c\n", type);
 			break;
 	}
+	// Defensive: a strdup/malloc above may have failed (NULL) under heap
+	// pressure. drawHS/drawVS/drawFreq tolerate a NULL extra, and the
+	// no-extra elements (lat/lon/alt/type/afc/rssi) never read it; every
+	// other draw function dereferences extra, so neutralise the entry to
+	// avoid a NULL dereference at render time.
+	if(de->extra == NULL && de->func &&
+	   de->func != disp.drawHS  && de->func != disp.drawVS  &&
+	   de->func != disp.drawFreq && de->func != disp.drawLat &&
+	   de->func != disp.drawLon && de->func != disp.drawAlt &&
+	   de->func != disp.drawType && de->func != disp.drawAFC &&
+	   de->func != disp.drawRSSI) {
+		de->func = NULL;
+	}
 }
 
 static uint8_t ACTION(char c) {
