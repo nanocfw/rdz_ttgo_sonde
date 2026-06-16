@@ -972,18 +972,26 @@ void Display::parseDispElement(char *text, DispEntry *de)
 				// extended configuration for arrow...
 				struct CircleInfo *circinfo = (struct CircleInfo *)malloc(sizeof(struct CircleInfo));
 				if(!circinfo) { de->func = NULL; break; }  // out of memory: skip this entry, drawGPS would deref extra
+				if(strlen(text) < 5) {
+					// malformed 'g0' config: too short for top/arr/bul; use safe defaults
+					circinfo->type='0'; circinfo->top='N'; circinfo->arr='C'; circinfo->bul='S';
+					circinfo->radius=50; circinfo->fgcol=0xfe80; circinfo->bgcol=0x0033;
+					circinfo->awidth=0; circinfo->acol=0xffff; circinfo->brad=0; circinfo->bcol=0xffff;
+					de->extra = (char *)circinfo;
+					break;
+				}
 #if 1
 				circinfo->type = '0';
 				circinfo->top = text[2];
 				circinfo->arr = text[3];
 				circinfo->bul = text[4];
 				char *ptr=text+5;
-				while(*ptr && *ptr!=',') ptr++; ptr++;
+				while(*ptr && *ptr!=',') ptr++; if(*ptr) ptr++;
 				// next: radius
 				circinfo->radius = atoi(ptr);
-				while(*ptr && *ptr!=',') ptr++; ptr++;
+				while(*ptr && *ptr!=',') ptr++; if(*ptr) ptr++;
 				circinfo->fgcol = encodeColor(ptr);
-				while(*ptr && *ptr!=',') ptr++; ptr++;
+				while(*ptr && *ptr!=',') ptr++; if(*ptr) ptr++;
 				circinfo->bgcol = encodeColor(ptr);
 #else
 				circinfo->type = '0';
@@ -994,13 +1002,13 @@ void Display::parseDispElement(char *text, DispEntry *de)
 				circinfo->fgcol = 0xfe80;
 				circinfo->bgcol = 0x0033;
 #endif
-				while(*ptr && *ptr!=',') ptr++; ptr++;
+				while(*ptr && *ptr!=',') ptr++; if(*ptr) ptr++;
 				circinfo->awidth = atoi(ptr);
-				while(*ptr && *ptr!=',') ptr++; ptr++;
+				while(*ptr && *ptr!=',') ptr++; if(*ptr) ptr++;
 				circinfo->acol = encodeColor(ptr);
-				while(*ptr && *ptr!=',') ptr++; ptr++;
+				while(*ptr && *ptr!=',') ptr++; if(*ptr) ptr++;
 				circinfo->brad = atoi(ptr);
-				while(*ptr && *ptr!=',') ptr++; ptr++;
+				while(*ptr && *ptr!=',') ptr++; if(*ptr) ptr++;
 				circinfo->bcol = encodeColor(ptr);
 				de->extra = (char *)circinfo;
 			} else {
