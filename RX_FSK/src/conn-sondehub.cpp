@@ -224,6 +224,10 @@ static void _sh_dns_found(const char * name, const ip_addr_t *ipaddr, void * /*a
 
 #define TO_WAITACK 15000
 #define TO_WAITIMPORT 30000
+// Timeout for the connection-establishment states (DNS lookup, TCP connect).
+// Without this, a lost lwIP DNS callback or a stalled non-blocking connect()
+// would leave the FSM stuck forever (only a hardware restart would recover it).
+#define TO_CONNECT 15000
 
 static void _sh_wait_cktimeout() {
     // This is also called when IDLE state checks for data, in this case data is arriving
@@ -262,6 +266,7 @@ void ConnSondehub::sondehub_client_fsm() {
             {
                 // We are disconnected. Try to connect, starting with a DNS lookup
                 shclient_state = SH_DNSLOOKUP;  // Set state already here to avoid potential race with callback
+                time_wait_start = millis();     // start watchdog for DNS lookup
                 err_t res = dns_gethostbyname_addrtype( sonde.config.sondehub.host, &shclient_ipaddr, _sh_dns_found, NULL, LWIP_DNS_ADDRTYPE_IPV4 );
                 if(res == ERR_OK) { // returns immediately if host is IP or in cache
                     shclient_state = SH_DNSRESOLVED;
@@ -278,7 +283,14 @@ void ConnSondehub::sondehub_client_fsm() {
         case SH_DNSLOOKUP:
             {
                 // DNS lookup still in progress. callback should switch to DNSRESOLVED or ERROR_RETRY, so just wait
-                // TODO: Maybe in case of stuck here, abort and retry?
+                // Watchdog: if the lwIP DNS callback never fires, don't get stuck here forever.
+                if (time_wait_start != 0 && millis() - time_wait_start > TO_CONNECT) {
+                    LOG_W(TAG, "timeout waiting for DNS response\n");
+                    shclient_state = SH_ERROR_RETRY;
+                    time_wait_start = 0;
+                    shStart = 0;
+                    break;
+                }
                 LOG_I(TAG, "SH_FSM: Waiting for DNS response\n");
                 break;
             }
@@ -300,6 +312,7 @@ void ConnSondehub::sondehub_client_fsm() {
                 if(res) {
                     if (errno == EINPROGRESS) { // Should be the usual case, go to connecting state
                         shclient_state = SH_CONNECTING;
+                        time_wait_start = millis();  // start watchdog for TCP connect
                     } else {
                         close(shclient);
                         shclient = -1;
@@ -329,6 +342,11 @@ void ConnSondehub::sondehub_client_fsm() {
                     LOG_E(TAG, "SH_CONNECTING: select error\n");
                     goto error;
                 } else if (res==0) { // still pending
+                    // Watchdog: don't wait forever if connect() never completes
+                    if (time_wait_start != 0 && millis() - time_wait_start > TO_CONNECT) {
+                        LOG_W(TAG, "timeout waiting for TCP connect\n");
+                        goto error;
+                    }
                     break;
                 }
                 // Socket has become ready (or something went wrong, check for error first)
@@ -436,6 +454,7 @@ error:
     close(shclient);
     shclient = -1;
     shclient_state = SH_ERROR_RETRY;
+    time_wait_start = 0;
     shStart = 0;
 }
 
