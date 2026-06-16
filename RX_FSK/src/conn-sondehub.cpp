@@ -711,7 +711,7 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
 
     /* if there is a subtype (DFM only) */
     if ( TYPE_IS_DFM(s->type) && s->d.subtype > 0 ) {
-        if ( (s->d.subtype & 0xF) != DFM_UNK) {
+        if ( (s->d.subtype & 0xF) != DFM_UNK && (s->d.subtype & 0xF) <= DFM_17P) {
             const char *t = dfmSubtypeLong[s->d.subtype & 0xF];
             sprintf(w, "\"subtype\": \"%s\",", t);
         }
