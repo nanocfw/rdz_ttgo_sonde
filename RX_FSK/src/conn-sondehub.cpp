@@ -391,13 +391,13 @@ void ConnSondehub::sondehub_client_fsm() {
                 //   noise tolerant - should not be needed:
                 //   if the data contains HTTP/1 copy that to the start of the buffer, ignore anything up to that point
                 //   if not find the last \0 and append next response after the part afterwards
-                fd_set fdset, fdeset;
-                FD_ZERO(&fdset);
-                FD_SET(shclient, &fdset);
-                FD_ZERO(&fdeset);
-                FD_SET(shclient, &fdeset);
+                fd_set fdset;
                 struct timeval selto = {0};
                 for(int k=0; k<10; k++) { // read more data...
+                    // select() modifies fdset in place (clears non-ready fds),
+                    // so it must be re-initialised on every iteration.
+                    FD_ZERO(&fdset);
+                    FD_SET(shclient, &fdset);
                     int res = select(shclient+1, &fdset, NULL, NULL, &selto);
                     if(res<0) {
                         LOG_E(TAG, "SH_CONN_IDLE: select error\n");
