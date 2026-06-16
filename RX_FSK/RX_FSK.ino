@@ -1503,8 +1503,6 @@ const char *sendGPX(AsyncWebServerRequest * request) {
     return "ERROR";
   }
   SondeInfo *si = &sonde.sondeList[index];
-  strcpy(si->d.id, "test");
-  si->d.lat = 48; si->d.lon = 11; si->d.alt = 500;
   snprintf(ptr, 10240, "<?xml version='1.0' encoding='UTF-8'?>\n"
            "<gpx version=\"1.1\" creator=\"http://rdzsonde.local\" xmlns=\"http://www.topografix.com/GPX/1/1\" "
            "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
