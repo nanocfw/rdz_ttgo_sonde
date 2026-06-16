@@ -7,6 +7,10 @@
     <title>Simple Login Form</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" type="text/css" href="style.css">
+    <script>
+        // If loaded inside a tab iframe (e.g. after an auth redirect), take over the full window
+        if (window.top !== window.self) { window.top.location.href = "/login.html"; }
+    </script>
     <script src="sha256.min.js" type="text/javascript"></script>
     <script>
         function computeHash(event) {

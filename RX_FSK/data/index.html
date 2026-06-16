@@ -151,7 +151,7 @@ document.getElementById("defaultTab").click();
 const bootID = "%BOOTID%";
 const prevID = localStorage.getItem("bootID");
 if(prevID && prevID !== bootID) {
-  document.cookie = `SESSION=; expires:Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+  document.cookie = `SESSION=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
 }
 localStorage.setItem("bootID", bootID);
 
@@ -162,8 +162,8 @@ if(sessionC) {
   const logoutLink = document.getElementById("logoutLink");
   logoutLink.addEventListener("click", function(event) {
      event.preventDefault(); // Prevent default link behavior
-     document.cookie = `SESSION=; expires:Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-     location.reload(); // Reload the page
+     document.cookie = `SESSION=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+     window.location.href = "/logout"; // Revoke the server-side session, then go to login page
   });
 } else {
   document.getElementById("userinfo").innerHTML = `<a style="color: white;" href="login.html">Login</a>`;

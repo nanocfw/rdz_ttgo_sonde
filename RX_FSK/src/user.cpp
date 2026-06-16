@@ -3,6 +3,8 @@
 #define TAG "user"
 #include "logger.h"
 #include <LittleFS.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <mbedtls/md.h>
 
@@ -15,9 +17,7 @@
 // TODO (optional) restrict session ID to specific client ID
 // TODO (maybe) update session ID expiration when being used (i.e. expire only after X minutes of idle?)
 
-#define USERLEN 8
-#define RNDLEN 16
-//#define COOKIE_SIZE (8+16+2)
+// USERLEN, RNDLEN and COOKIE_SIZE are defined in user.h
 
 struct SessionCookie {
   char value[USERLEN+RNDLEN+2];
@@ -32,7 +32,7 @@ int cookieCount = 0;
 const unsigned long COOKIE_EXPIRY_DURATION = 30 * 60 * 1000; // 30 minutes in milliseconds
 const unsigned long PREAUTH_EXPIRY_DURATION = 60 * 1000;  // 1 minute in milliseconds
 
-static const char *getUser(const char *user, char *line, int maxlen);
+static const char *getUser(const char *user, char *line, int maxlen, int *outLevel);
 
 void cleanupExpiredCookies() {
   unsigned long now = millis();
@@ -40,7 +40,8 @@ void cleanupExpiredCookies() {
 
   // Loop through the cookies and remove expired ones
   while (i < cookieCount) {
-    if (authCookies[i].expiry < now) {
+    // Signed difference handles millis() wraparound (~49 days uptime) correctly.
+    if ((long)(now - authCookies[i].expiry) > 0) {
       // Shift the remaining cookies left
       for (int j = i; j < cookieCount - 1; j++) {
         authCookies[j] = authCookies[j + 1];
@@ -74,6 +75,9 @@ int upgradeCookie(const char *preauth, const char *cookie, char userclass) {
     if (strcmp(preauth, authCookies[i].value)==0) {
       strlcpy(authCookies[i].value, cookie, sizeof(authCookies[i].value));
       authCookies[i].userclass = userclass;
+      // Refresh expiry: the entry still carries the short preauth lifetime, so without this
+      // the upgraded session would expire ~1 minute after the login page was loaded.
+      authCookies[i].expiry = millis() + COOKIE_EXPIRY_DURATION;
       return 0;
     }
   }
@@ -100,7 +104,8 @@ int getCookieAuthLevel(const char *cookie) {
   unsigned long now = millis();
   for (int i = 0; i < cookieCount; i++) { 
     if (strcmp(authCookies[i].value, cookie) == 0) {
-      if (authCookies[i].expiry > now) {
+      // Signed difference handles millis() wraparound (~49 days uptime) correctly.
+      if ((long)(now - authCookies[i].expiry) < 0) {
         return authCookies[i].userclass; // Valid and not expired
       } else {
         // Cookie expired, remove it
@@ -116,6 +121,21 @@ int getCookieAuthLevel(const char *cookie) {
 }
 
 
+// Remove a session cookie from the store (used for logout).
+// Returns 0 if a matching cookie was removed, -1 if not found.
+int removeCookie(const char *cookie) {
+  for (int i = 0; i < cookieCount; i++) {
+    if (strcmp(authCookies[i].value, cookie) == 0) {
+      for (int j = i; j < cookieCount - 1; j++) {
+        authCookies[j] = authCookies[j + 1];
+      }
+      cookieCount--;
+      return 0;
+    }
+  }
+  return -1;
+}
+
 // -1: user does not exist; 0=PERM_NONE, 1=PERM_RO, 2=PERM_ADMIN
 int getUserPermissions(const char *user, const char *preauth, const char *auth) {
     // simple digest authentication:
@@ -123,8 +143,14 @@ int getUserPermissions(const char *user, const char *preauth, const char *auth) 
     // digest is SHA256(user:preauth:password)
     char buf[256];
     char line[128];
-    const char *pass = getUser(user, line, 128);
+    int level = 0;
+    const char *pass = getUser(user, line, 128, &level);
     if(!pass) {  // user not found
+      return -1;
+    }
+    // auth is user-provided: it must be exactly 64 hex chars (SHA256 = 32 bytes).
+    // Reject anything else to avoid reading past the end of the string below.
+    if(strlen(auth) != 64) {
       return -1;
     }
     strlcpy(buf, user, 256);
@@ -141,17 +167,13 @@ int getUserPermissions(const char *user, const char *preauth, const char *auth) 
     mbedtls_md_update(&ctx, (const unsigned char *) buf, strlen(buf));
     mbedtls_md_finish(&ctx, sharesult);
     bool match = true;
-    Serial.print("Hash: ");
-    Serial.printf(" Comparing to %s\n", auth);
     for(int i= 0; i< sizeof(sharesult); i++){
       char str[3];
       sprintf(str, "%02x", (int)sharesult[i]);
-      Serial.printf(" [%c-%c-%c-%c] ",auth[0], auth[1], str[0], str[1]);
       if( (auth[0]!=str[0]) || (auth[1]!=str[1])) match = false;
       auth += 2;
-      Serial.print(str);
-    } 
-    int authres = match ? pass[-2]-'0' : -1;   // ugly code, TODO: beautify...
+    }
+    int authres = match ? level : -1;
     LOG_I(TAG, "login: match: %d => auth level %d\n", match, authres);
     return authres;
 }
@@ -160,22 +182,51 @@ int getUserPermissions(const char *user, const char *preauth, const char *auth) 
 extern int readLine(Stream &stream, char *buffer, int maxlen);  // impl in RX_FSK.ino
 
 
-static const char *getUser(const char *user, char *line, int maxlen) {
+// Trim leading/trailing ASCII whitespace in place; returns a pointer to the first non-space char.
+static char *trimws(char *s) {
+  while (*s == ' ' || *s == '\t') s++;
+  int n = strlen(s);
+  while (n > 0 && (s[n-1] == ' ' || s[n-1] == '\t')) s[--n] = 0;
+  return s;
+}
+
+// Find a user entry in the password file.
+// File format: one "username,level,password" record per line; lines starting with '#' are comments.
+// Leading/trailing whitespace around each field is ignored, the level may have multiple digits,
+// and trailing CR is already stripped by readLine().
+// On success returns a pointer to the (null-terminated) password and, if outLevel != NULL, stores
+// the parsed access level there. Returns NULL if the user is not found.
+static const char *getUser(const char *user, char *line, int maxlen, int *outLevel) {
   File file = LittleFS.open("/user.txt", "r");
   if(!file) {
     LOG_E(TAG, "Error opening '/user.txt'\n");
-    strcpy(line, ",2,");  // all permission by default...
-    return line+3;  // all permissions for unauthenticated user by default for now...
+    if(outLevel) *outLevel = 2;  // all permissions by default if no user file exists
+    line[0] = 0;
+    return line;                 // empty password
   }
   while (file.available()) {
     int res = readLine(file, line, maxlen);
+    if(res <= 0) continue;
     if(line[0] == '#') continue;
+    // Split into three fields at the first two commas
     char *sep1 = strchr(line, ',');
-    if(!sep1) continue;
+    if(!sep1) continue;          // malformed: no level/password
     *sep1 = 0;
-    if(strcmp(user,line)==0) {
-      LOG_D(TAG, "Found pw entry with user '%s': %s\n", user, line);
-      return sep1+3; // hack-ish...  TODO: find separater 2? maybe...
+    char *sep2 = strchr(sep1 + 1, ',');
+    if(!sep2) continue;          // malformed: no password
+    *sep2 = 0;
+    char *uname = trimws(line);
+    char *lvl   = trimws(sep1 + 1);
+    char *pass  = trimws(sep2 + 1);
+    if(strcmp(user, uname) == 0) {
+      LOG_D(TAG, "Found pw entry for user '%s'\n", user);
+      if(outLevel) {
+        char *end;
+        long v = strtol(lvl, &end, 10);
+        if(end == lvl || v < 0) v = 0;  // non-numeric/invalid level => no access
+        *outLevel = (int)v;
+      }
+      return pass;
     }
   }
   return NULL;
@@ -183,8 +234,9 @@ static const char *getUser(const char *user, char *line, int maxlen) {
 
 int getDefaultAuthLevel() {
   char line[128];
-  const char *ptr = getUser("", line, 128);
-  if(!ptr) return 2;
-  return ptr[-2]-'0';
+  int level = 2;
+  const char *ptr = getUser("", line, 128, &level);
+  if(!ptr) return 2;   // no default-user line => unauthenticated access allowed (unchanged behavior)
+  return level;
 }
 

@@ -184,6 +184,15 @@ int checkAllowed(const char *filename) {
     return 1;
 }
 
+// Files that hold credentials and must not be served to unauthenticated clients.
+bool isSensitiveFile(const char *url) {
+    static const char *deny[] = { "user.txt", "networks.txt", "config.txt" };
+    for(unsigned i=0; i<sizeof(deny)/sizeof(deny[0]); i++) {
+        if(strstr(url, deny[i]) != NULL) return true;
+    }
+    return false;
+}
+
 
 // Read line from file, independent of line termination (LF or CR LF)
 String readLine(Stream &stream) {
@@ -407,6 +416,46 @@ const char *handleLoginPost(AsyncWebServerRequest * request) {
   }
   request->send(401, "text/plain", "Invalid credentials or session expired");
   return nullptr;
+}
+
+// Extract the SESSION cookie value from a request, or "" if none. dst must hold at least COOKIE_SIZE bytes.
+static void getSessionCookie(AsyncWebServerRequest *request, char *dst, int maxlen) {
+  dst[0] = 0;
+  if(!request->hasHeader("Cookie")) return;
+  String cookieHdr = request->getHeader("Cookie")->value();
+  // Match "SESSION=" only at a cookie-name boundary (start of header or after a ';'),
+  // so we don't accidentally match it inside another cookie name like "MYSESSION=".
+  int from = 0;
+  while(true) {
+    int start = cookieHdr.indexOf("SESSION=", from);
+    if(start == -1) return;
+    bool boundary = (start == 0);
+    if(!boundary) {
+      int p = start - 1;
+      while(p >= 0 && cookieHdr[p] == ' ') p--;  // skip the separator's whitespace
+      boundary = (p >= 0 && cookieHdr[p] == ';');
+    }
+    if(boundary) {
+      start += strlen("SESSION=");
+      int end = cookieHdr.indexOf(';', start);
+      String session = (end==-1) ? cookieHdr.substring(start) : cookieHdr.substring(start, end);
+      session.trim();
+      strlcpy(dst, session.c_str(), maxlen);
+      return;
+    }
+    from = start + 1;
+  }
+}
+
+void handleLogout(AsyncWebServerRequest * request) {
+  // Revoke the server-side session, clear the client cookie, and return to the login page
+  char session[COOKIE_SIZE];
+  getSessionCookie(request, session, COOKIE_SIZE);
+  if(session[0]) removeCookie(session);
+  AsyncWebServerResponse *response = request->beginResponse(302);
+  response->addHeader("Location", "/login.html");
+  response->addHeader("Set-Cookie", "SESSION=; Path=/; Max-Age=0; SameSite=Strict");
+  request->send(response);
 }
 
 const char *getQRGAsJson() {
@@ -1356,20 +1405,18 @@ const char *sendGPX(AsyncWebServerRequest * request) {
 bool isAuthenticated(AsyncWebServerRequest *request, int level) {
   if(defaultUserLevel >= level)
     return 1;
-  if(request->hasHeader("Cookie")) {
-    String cookieHdr = request->getHeader("Cookie")->value();
-    int start = cookieHdr.indexOf("SESSION=") + strlen("SESSION=");
-    if(start!=-1) {
-      int end = cookieHdr.indexOf(';', start);
-      String session = (end==-1) ? cookieHdr.substring(start) : cookieHdr.substring(start, end);
-      session.trim();
-      int ulvl = getCookieAuthLevel(session.c_str());
-      if(ulvl >= level) {
-        return 1;
-      }
+  char session[COOKIE_SIZE];
+  getSessionCookie(request, session, COOKIE_SIZE);
+  if(session[0]) {
+    int ulvl = getCookieAuthLevel(session);
+    if(ulvl >= level) {
+      return 1;
     }
   }
-  request->send(401, "text/plain", "Permission denied");
+  // Not authenticated: send the user to the login page instead of a bare 401 text response
+  AsyncWebServerResponse *response = request->beginResponse(302);
+  response->addHeader("Location", "/login.html");
+  request->send(response);
   return false;
 }
 
@@ -1465,6 +1512,7 @@ void SetupAsyncServer() {
     request->send(200, "text/html", createUpdateForm(0));
   });
   server.on("/update.html", HTTP_POST, [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;
     handleUpdatePost(request);
     request->send(200, "text/html", createUpdateForm(1));
   });
@@ -1484,6 +1532,9 @@ void SetupAsyncServer() {
   });
   server.on("/login.html", HTTP_POST, [](AsyncWebServerRequest * request) {
     handleLoginPost(request);
+  });
+  server.on("/logout", HTTP_GET, [](AsyncWebServerRequest * request) {
+    handleLogout(request);
   });
 
   server.on("/file", HTTP_GET,  [](AsyncWebServerRequest * request) {
@@ -1506,6 +1557,7 @@ void SetupAsyncServer() {
   //server.on("/sd/files.json", HTTP_GET, [](AsyncWebServerRequest *request) {  } ); /// TODO: fix later, temporarily keep for bkward compat
 
   server.on("/files.json", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if(!isAuthenticated(request, 2)) return;
 #define FILES_JSON_MAX_SIZE 4096
 #define FILES_JSON_MAX_ENTRY 128
     String subdir;
@@ -1717,6 +1769,11 @@ void SetupAsyncServer() {
       request->send(200);
     } else {
       String url = request->url();
+      // Never serve credential files to unauthenticated clients (this static fallback
+      // would otherwise expose user.txt / networks.txt / config.txt by direct URL).
+      if (isSensitiveFile(url.c_str())) {
+        if(!isAuthenticated(request, 2)) return;
+      }
       if (url.endsWith(".gpx"))
         request->send(200, "application/gpx+xml", sendGPX(request));
       else {
