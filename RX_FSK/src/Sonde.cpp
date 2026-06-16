@@ -554,6 +554,7 @@ void Sonde::nextRxSonde() {
 }
 void Sonde::nextRxFreq(int addkhz) {
 	// last entry is for the variable frequency
+	if(nSonde < 1) return;	// no channels (empty/all-malformed qrg.txt) => avoid sondeList[-1]
 	rxtask.currentSonde = nSonde - 1;
 	sondeList[rxtask.currentSonde].active = 1;
 	sondeList[rxtask.currentSonde].freq += addkhz*0.001;
