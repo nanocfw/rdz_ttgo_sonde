@@ -681,6 +681,12 @@ h1{
   padding: 28px 18px;
 }
 .system-info h1 { text-align: center; margin-top: 0; }
+/* Keep long URLs in the license text and long status strings from forcing a
+   horizontal scrollbar: let them wrap within the centered column instead.
+   overflow-wrap:anywhere also lets the status table shrink to the column width. */
+.system-info { box-sizing: border-box; min-width: 0; }
+.system-info p, .system-info a,
+.status-table td, .status-table th { overflow-wrap: anywhere; }
 /* Table fills the centered column; styled like the Home status table.
    margin auto centers it -- overrides table.stat's margin-left/right:0, which was
    left-aligning the Data (status) tables. */
