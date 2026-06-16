@@ -29,8 +29,10 @@
                 .then(resp => {
                     if (resp.ok) { window.location.href = '/index.html'; return; }
                     return resp.text().then(msg => {
-                        // The preauth nonce is single-use/short-lived, so reload for a fresh one.
-                        showAlert(msg || 'Login failed').then(() => window.location.reload());
+                        // A failed login does NOT consume the preauth nonce (it is only
+                        // consumed on success), and it stays valid for ~60s -- so the user can
+                        // simply retype the password and retry, no page reload needed.
+                        showAlert(msg || 'Login failed');
                     });
                 })
                 .catch(() => { showAlert('Login failed (network error)'); });
