@@ -679,7 +679,9 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
     memset(rs_msg, 0, MSG_SIZE);
     w = rs_msg;
 
-    sprintf(w,
+    // helper: remaining space in rs_msg[] from the current write cursor
+    #define SH_REMAIN (MSG_SIZE - (int)(w - rs_msg))
+    snprintf(w, SH_REMAIN,
             " {"
             "\"software_name\": \"%s\","
             "\"software_version\": \"%s\","
@@ -709,7 +711,7 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
 
     // Only send sats if not M20
     if (realtype != STYPE_M20) {
-        sprintf(w, "\"sats\": %d,", (int)s->d.sats);
+        snprintf(w, SH_REMAIN, "\"sats\": %d,", (int)s->d.sats);
         w += strlen(w);
     }
 
@@ -717,62 +719,62 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
     if ( TYPE_IS_DFM(s->type) && s->d.subtype > 0 ) {
         if ( (s->d.subtype & 0xF) != DFM_UNK && (s->d.subtype & 0xF) <= DFM_17P) {
             const char *t = dfmSubtypeLong[s->d.subtype & 0xF];
-            sprintf(w, "\"subtype\": \"%s\",", t);
+            snprintf(w, SH_REMAIN, "\"subtype\": \"%s\",", t);
         }
         else {
-            sprintf(w, "\"subtype\": \"DFMx%X\",", s->d.subtype >> 4); // Unknown subtype
+            snprintf(w, SH_REMAIN, "\"subtype\": \"DFMx%X\",", s->d.subtype >> 4); // Unknown subtype
         }
         w += strlen(w);
     } else if ( s->type == STYPE_RS41 ) {
         char buf[11];
         if (RS41::getSubtype(buf, 11, s) == 0) {
-            sprintf(w, "\"subtype\": \"%s\",", buf);
+            snprintf(w, SH_REMAIN, "\"subtype\": \"%s\",", buf);
             w += strlen(w);
         }
     }
 
     // Only send temp if provided
     if (!isnan(s->d.temperature)) {
-        sprintf(w, "\"temp\": %.1f,", s->d.temperature);
+        snprintf(w, SH_REMAIN, "\"temp\": %.1f,", s->d.temperature);
         w += strlen(w);
     }
 
     // Only send humidity if provided
     if (!isnan(s->d.relativeHumidity)) {
-        sprintf(w, "\"humidity\": %.1f,", s->d.relativeHumidity);
+        snprintf(w, SH_REMAIN, "\"humidity\": %.1f,", s->d.relativeHumidity);
         w += strlen(w);
     }
 
     // Only send pressure if provided
     if (!isnan(s->d.pressure)) {
-        sprintf(w, "\"pressure\": %.2f,", s->d.pressure);
+        snprintf(w, SH_REMAIN, "\"pressure\": %.2f,", s->d.pressure);
         w += strlen(w);
     }
 
     // Only send burst timer if RS41 and fresh within the last 51s
     if ((realtype == STYPE_RS41) && (s->d.crefKT > 0) && (s->d.vframe - s->d.crefKT < 51)) {
-        sprintf(w, "\"burst_timer\": %d,", (int)s->d.countKT);
+        snprintf(w, SH_REMAIN, "\"burst_timer\": %d,", (int)s->d.countKT);
         w += strlen(w);
     }
 
     // Only send battery if provided
     if (s->d.batteryVoltage > 0) {
-        sprintf(w, "\"batt\": %.2f,", s->d.batteryVoltage);
+        snprintf(w, SH_REMAIN, "\"batt\": %.2f,", s->d.batteryVoltage);
         w += strlen(w);
     }
 
     // Only send antenna if provided
     if (strlen(conf->antenna) != 0) {
-        sprintf(w, "\"uploader_antenna\": \"%s\",", conf->antenna);
+        snprintf(w, SH_REMAIN, "\"uploader_antenna\": \"%s\",", conf->antenna);
         w += strlen(w);
     }
 
     // We send GPS position: (a) in CHASE mode, (b) in AUTO mode if no fixed location has been specified in config
     if (chase == SH_LOC_CHASE) {
         if (gpsPos.valid) {
-            sprintf(w, "\"uploader_position\": [%.6f,%.6f,%d]", gpsPos.lat, gpsPos.lon, gpsPos.alt);
+            snprintf(w, SH_REMAIN, "\"uploader_position\": [%.6f,%.6f,%d]", gpsPos.lat, gpsPos.lon, gpsPos.alt);
         } else {
-            sprintf(w, "\"uploader_position\": [null,null,null]");
+            snprintf(w, SH_REMAIN, "\"uploader_position\": [null,null,null]");
         }
         w += strlen(w);
     }
@@ -780,20 +782,21 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
     else if (chase == SH_LOC_FIXED) {
         if ((!isnan(sonde.config.rxlat)) && (!isnan(sonde.config.rxlon))) {
             if (isnan(sonde.config.rxalt))
-                sprintf(w, "\"uploader_position\": [%.6f,%.6f,null]", sonde.config.rxlat, sonde.config.rxlon);
+                snprintf(w, SH_REMAIN, "\"uploader_position\": [%.6f,%.6f,null]", sonde.config.rxlat, sonde.config.rxlon);
             else
-                sprintf(w, "\"uploader_position\": [%.6f,%.6f,%d]", sonde.config.rxlat, sonde.config.rxlon, (int)sonde.config.rxalt);
+                snprintf(w, SH_REMAIN, "\"uploader_position\": [%.6f,%.6f,%d]", sonde.config.rxlat, sonde.config.rxlon, (int)sonde.config.rxalt);
         } else {
-            sprintf(w, "\"uploader_position\": [null,null,null]");
+            snprintf(w, SH_REMAIN, "\"uploader_position\": [null,null,null]");
         }
         w += strlen(w);
     } else {
-        sprintf(w, "\"uploader_position\": [null,null,null]");
+        snprintf(w, SH_REMAIN, "\"uploader_position\": [null,null,null]");
         w += strlen(w);
     }
 
     // otherwise (in SH_LOC_NONE mode) we dont include any position info
-    sprintf(w, "}");
+    snprintf(w, SH_REMAIN, "}");
+    #undef SH_REMAIN
 
     if (shclient_state != SH_CONN_APPENDING) {
         sondehub_send_header(s, &timeinfo);
