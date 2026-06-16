@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rdzSonde Scan Plot</title>
+<style>
+  body { font-family: sans-serif; margin: 0; background:#000; color:#eee; }
+  .bar { padding: 8px 12px; background:#1a1a1a; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  .bar a { color:#6cf; text-decoration:none; }
+  #banner { padding:6px 12px; background:#553; color:#ffd; display:none; }
+  #head { padding:6px 12px 0; }
+  #head h2 { margin:0; font-size:1.05em; }
+  #stamp { font-size:0.9em; color:#bbb; }
+  #wrap { padding:4px 12px 12px; }
+  canvas { width:100%; background:#000; display:block; }
+  .muted { color:#999; font-size:0.85em; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <a href="/">&larr; Home</a>
+    <b>Spectrum</b>
+    <span id="info" class="muted"></span>
+  </div>
+  <div id="banner"></div>
+  <div id="head">
+    <h2>&#9660; Scan Plot</h2>
+    <div id="stamp">Latest Scan: &mdash;</div>
+  </div>
+  <div id="wrap">
+    <canvas id="plot" width="1200" height="260"></canvas>
+  </div>
+
+<script>
+const POLL_MS = 3000;      // how often to poll for a fresh scan
+const THR_MARGIN = 0.15;   // noise-reference line = median + THR_MARGIN*(max-median)
+let lastSeq = -1;
+let cv = document.getElementById('plot');
+let ctx = cv.getContext('2d');
+let info = document.getElementById('info');
+let banner = document.getElementById('banner');
+let stamp = document.getElementById('stamp');
+let lastJson = null;
+
+function median(arr) {
+  let s = [...arr].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+function draw() {
+  let j = lastJson;
+  if (!j || !j.data || j.n < 2) return;
+  let n = j.n, data = j.data, start = j.startfreq, step = j.step;
+
+  // logical canvas size (CSS scales width to 100%)
+  let W = cv.width, H = cv.height;
+  const ML = 48, MR = 12, MT = 12, MB = 24;        // margins
+  let pw = W - ML - MR, ph = H - MT - MB;
+
+  // y range from data, padded to a 5 dB grid
+  let dmin = Math.min(...data), dmax = Math.max(...data);
+  let ymin = Math.floor((dmin - 2) / 5) * 5;
+  let ymax = Math.ceil((dmax + 2) / 5) * 5;
+  if (ymax <= ymin) ymax = ymin + 5;
+  let xFor = i => ML + (i / (n - 1)) * pw;
+  let yFor = v => MT + (1 - (v - ymin) / (ymax - ymin)) * ph;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // grid + axes
+  ctx.strokeStyle = '#333'; ctx.fillStyle = '#aaa';
+  ctx.lineWidth = 1; ctx.font = '11px sans-serif';
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'right';
+  for (let v = ymin; v <= ymax; v += 5) {
+    let y = yFor(v);
+    ctx.beginPath(); ctx.moveTo(ML, y); ctx.lineTo(W - MR, y); ctx.stroke();
+    ctx.fillText(v.toString(), ML - 5, y);
+  }
+  ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+  let fmax = start + (n - 1) * step;
+  for (let f = Math.ceil(start); f <= fmax; f += 1) {     // 1 MHz ticks
+    let i = (f - start) / step;
+    let x = xFor(i);
+    ctx.strokeStyle = '#222';
+    ctx.beginPath(); ctx.moveTo(x, MT); ctx.lineTo(x, MT + ph); ctx.stroke();
+    ctx.fillStyle = '#aaa';
+    ctx.fillText(f.toFixed(0), x, MT + ph + 4);
+  }
+  // axis labels
+  ctx.save();
+  ctx.fillStyle = '#888'; ctx.textAlign = 'center';
+  ctx.fillText('Frequency (MHz)', ML + pw / 2, H - 11);
+  ctx.translate(11, MT + ph / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillText('Power (dBm)', 0, 0);
+  ctx.restore();
+
+  // threshold (dotted)
+  let med = median(data), mx = dmax;
+  let thr = med + THR_MARGIN * (mx - med);
+  ctx.strokeStyle = '#888'; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(ML, yFor(thr)); ctx.lineTo(W - MR, yFor(thr)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // trace
+  ctx.strokeStyle = '#3a7bd5'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    let x = xFor(i), y = yFor(data[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+async function poll() {
+  try {
+    let r = await fetch('/spectrum.json', { cache: 'no-store' });
+    let j = await r.json();
+
+    if (j.interval === 0) {
+      banner.style.display = 'block';
+      banner.textContent = 'Scan plot disabled — set "scanplotint" > 0 (seconds) to enable.';
+    } else if (j.status === 'rx') {
+      banner.style.display = 'block';
+      banner.textContent = 'Paused — receiving sonde ' +
+        (j.rxname ? ('"' + j.rxname + '" ') : '') + 'on ' +
+        (j.rxfreq != null ? j.rxfreq.toFixed(3) : '?') + ' MHz.';
+    } else {
+      banner.style.display = 'none';
+    }
+
+    info.textContent = j.n + ' bins, ' + (j.step * 1000).toFixed(1) +
+      ' kHz/bin, interval ' + j.interval + 's';
+
+    if (j.seq !== lastSeq && j.n >= 2) {        // fresh scan -> redraw
+      lastSeq = j.seq;
+      lastJson = j;
+      let when = new Date(Date.now() - (j.age_ms || 0));
+      stamp.textContent = 'Latest Scan: ' + when.toLocaleString();
+      draw();
+    }
+  } catch (e) {
+    info.textContent = 'fetch error: ' + e;
+  } finally {
+    setTimeout(poll, POLL_MS);
+  }
+}
+window.addEventListener('resize', draw);
+poll();
+</script>
+</body>
+</html>

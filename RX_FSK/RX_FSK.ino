@@ -878,6 +878,39 @@ const char *createLiveJson() {
   strcat(ptr, "}");
   return message;
 }
+
+const char *createSpectrumJson() {
+  // Reads scandisp[]/peakf lock-free from the web task while the RX task may be
+  // sweeping; mirrors createLiveJson(). Display-only data, so a momentarily mixed
+  // row is harmless; seq lets the client detect/ignore an in-progress sweep.
+  char *ptr = message;
+  SondeInfo *s = &sonde.sondeList[sonde.currentSonde];
+  int n = scanner.dispW();
+  const int *data = scanner.dispData();
+  int rx = (s->lastState == 1) ? 1 : 0;
+  uint32_t lastms = scanner.webMillis();
+  unsigned long age = lastms ? (millis() - lastms) : 0;
+
+  ptr += sprintf(ptr,
+    "{\"seq\":%u,\"age_ms\":%lu,\"startfreq\":%d,\"step\":%.5f,\"n\":%d,"
+    "\"noisefloor\":%d,\"peak\":%.3f,\"interval\":%d,\"status\":\"%s\"",
+    (unsigned)scanner.webSeq(), age, sonde.config.startfreq, scanner.stepMHz(),
+    n, sonde.config.noisefloor, scanner.peakMHz(), sonde.config.scanplotint,
+    rx ? "rx" : "idle");
+
+  if (rx) {
+    ptr += sprintf(ptr, ",\"rxfreq\":%3.3f,\"rxname\":\"%s\"", s->freq, s->d.id);
+  }
+
+  // scandisp holds -RssiValue; RSSI[dBm] = -RssiValue/2, so emit data/2.0 as dBm
+  // (same convention as the sonde rssi reported to SondeHub). noisefloor is already dBm.
+  ptr += sprintf(ptr, ",\"data\":[");
+  for (int i = 0; i < n; i++) {
+    ptr += sprintf(ptr, "%s%.1f", i ? "," : "", data[i] / 2.0);
+  }
+  strcpy(ptr, "]}");
+  return message;
+}
 ///////////////////// Config form
 
 
@@ -914,6 +947,7 @@ struct st_configitems config_list[] = {
   {"channelbw", 0, &sonde.config.channelbw},
   {"marker", 0, &sonde.config.marker},
   {"noisefloor", 0, &sonde.config.noisefloor},
+  {"scanplotint", 0, &sonde.config.scanplotint},
   /* decoder settings */
   {"freqofs", 0, &sonde.config.freqofs},
   {"lnaboost", 0, &sonde.config.lnaboost},
@@ -1640,6 +1674,9 @@ void SetupAsyncServer() {
   server.on("/live.json", HTTP_GET,  [](AsyncWebServerRequest * request) {
     request->send(200, "text/json", createLiveJson());
   });
+  server.on("/spectrum.json", HTTP_GET,  [](AsyncWebServerRequest * request) {
+    request->send(200, "text/json", createSpectrumJson());
+  });
   server.on("/livemap.html", HTTP_GET, [](AsyncWebServerRequest * request) {
     request->send(LittleFS, "/livemap.html", String(), false, processor);
   });
@@ -2092,6 +2129,22 @@ const char *getStateStr(int what) {
     return mainStateStr[what];
 }
 
+// Web scan plot: when idle (no sonde locked) and the configured interval has
+// elapsed, run one data-only spectrum sweep, then restore decode tuning.
+static unsigned long lastScanPlotMillis = 0;
+static void maybeScanPlotSweep() {
+  if (sonde.config.scanplotint <= 0) return;          // feature disabled
+  SondeInfo *si = &sonde.sondeList[sonde.currentSonde];
+  if (si->lastState == 1) return;                     // locked onto a sonde -> never sweep
+  unsigned long now = millis();
+  unsigned long interval = (unsigned long)sonde.config.scanplotint * 1000UL;
+  if (lastScanPlotMillis != 0 && (now - lastScanPlotMillis) < interval) return;
+  lastScanPlotMillis = now;
+  LOG_I(TAG, "ScanPlot: idle sweep\n");
+  scanner.scanForWeb();                               // data-only sweep, bumps seq
+  sonde.setup();                                      // restore radio tuning for current sonde
+}
+
 void sx1278Task(void *parameter) {
   /* new strategy:
       background tasks handles all interactions with sx1278.
@@ -2121,6 +2174,7 @@ void sx1278Task(void *parameter) {
       continue;
     }
     sonde.receive();
+    maybeScanPlotSweep();
     delay(20);
   }
 }

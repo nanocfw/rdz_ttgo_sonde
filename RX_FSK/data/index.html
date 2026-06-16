@@ -14,6 +14,7 @@
 	<a href="#qrg" onclick="selTab(event,'QRG')" class="tablinks" data-minlevel="1">QRG</a>
 	<a href="#data" onclick="selTab(event,'Data')" class="tablinks">Data</a>
 	<a href="#livemap" onclick="document.location.href='livemap.html'" class="tablinks">Livemap</a>
+	<a href="#scanplot" onclick="document.location.href='scanplot.html'" class="tablinks">Scan Plot</a>
 	<a href="#ctrl" onclick="selTab(event,'Control')" class="tablinks" data-minlevel="1">Control</a>
 	<a href="#config" onclick="selTab(event,'Config')" class="tablinks" data-minlevel="1">Config</a>
 	<a href="#wifi" onclick="selTab(event,'WiFi')" class="tablinks" data-minlevel="2">WiFi</a>
@@ -164,7 +165,7 @@ function myFunction() {
 }
 // Hide nav tabs the current user cannot access (mirrors the server-side auth checks), then
 // restore the tab named in the URL hash on reload (e.g. #users), else default to Home.
-// Skip #livemap: that link navigates to a separate page rather than switching tabs.
+// Skip #livemap/#scanplot: those links navigate to separate pages rather than switching tabs.
 function applyAccess(level) {
 	var links = document.getElementsByClassName("tablinks");
 	for(var i=0; i<links.length; i++) {
@@ -172,7 +173,7 @@ function applyAccess(level) {
 		links[i].style.display = (need > level) ? "none" : "";
 	}
 	var hash = location.hash;
-	var tab = (hash && hash !== "#livemap")
+	var tab = (hash && hash !== "#livemap" && hash !== "#scanplot")
 		? document.querySelector('.tablinks[href="' + hash + '"]')
 		: null;
 	if(tab && tab.style.display === "none") tab = null;  // requested tab is not accessible

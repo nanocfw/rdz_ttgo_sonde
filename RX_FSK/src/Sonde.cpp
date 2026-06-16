@@ -374,6 +374,7 @@ void Sonde::defaultConfig() {
 	config.display[1]=1;
 	config.display[2]=-1;
 	config.startfreq=400;
+	config.scanplotint=60;
 	config.channelbw=10;
 	config.marker=0;
 	config.freqofs=0;

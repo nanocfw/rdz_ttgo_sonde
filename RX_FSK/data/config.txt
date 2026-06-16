@@ -70,6 +70,7 @@ channelbw=10
 spectrum=-1 #10
 noisefloor=-125
 marker=1
+scanplotint=60
 #-------------------------------#
 # APRS settings
 #-------------------------------#

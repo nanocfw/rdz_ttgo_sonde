@@ -22,6 +22,7 @@ var cfgs = [
 [ "channelbw", "Bandwidth (kHz)" ],
 [ "marker", "Spectrum MHz marker" ],   // maybe remove, assume always ==1?
 [ "noisefloor", "Spectrum noisefloor" ],
+[ "scanplotint", "Web scan-plot idle-sweep interval [sec] (0=disabled)" ],
 [ "", "Receiver configuration", "https://github.com/dl9rdz/rdz_ttgo_sonde/wiki/Receiver-configuration" ],
 [ "freqofs", "RX frequency offset (Hz)"],
 [ "lnaboost", "LNA current boost (0=default, 1=150%; useful without external LNA)"],

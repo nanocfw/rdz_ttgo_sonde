@@ -52,6 +52,8 @@ struct scancfg &scanconfig = scanTFT;
 int scanresult[MAXN];
 int scandisp[MAXDISP];
 double peakf=0;
+static volatile uint32_t scanWebSeq = 0;
+static volatile uint32_t scanWebMillis = 0;
 
 //#define PLOT_MIN -250
 #define PLOT_MIN (sonde.config.noisefloor*2)
@@ -234,3 +236,18 @@ void Scanner::scan()
 }
 
 Scanner scanner = Scanner();
+
+void Scanner::scanForWeb()
+{
+	// scan() fills scanresult[]/scandisp[] and peakf; it does NOT draw to the display.
+	scan();
+	scanWebMillis = millis();
+	scanWebSeq++;
+}
+
+uint32_t Scanner::webSeq() { return scanWebSeq; }
+uint32_t Scanner::webMillis() { return scanWebMillis; }
+int Scanner::dispW() { return scanconfig.PLOT_W; }
+double Scanner::stepMHz() { return scanconfig.CHANSTEP * scanconfig.SMPL_PIX / 1000.0; }
+const int *Scanner::dispData() { return scandisp; }
+double Scanner::peakMHz() { return peakf * 1e-6; }

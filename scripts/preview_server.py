@@ -15,7 +15,9 @@ Usage:
 """
 import argparse
 import json
+import math
 import os
+import random
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PLACEHOLDERS = {
@@ -206,6 +208,31 @@ MOCK_JSON = {
 }
 
 
+# Synthetic spectrum for /spectrum.json (scanplot.html). A noisy baseline with a
+# few peaks and one tall mid-band spike; seq increments so the page animates.
+_SPECTRUM_SEQ = [0]
+
+
+def gen_spectrum():
+    # Values are dBm (matching the firmware: RSSI[dBm] = -RssiValue/2).
+    n, start, step, base = 210, 400, 6.0 / 210, -110.0
+    data = [base + random.uniform(-2, 2) for _ in range(n)]
+    for frac, h in ((0.03, 30), (0.13, 42), (0.28, 22), (0.40, 38),
+                    (0.55, 55), (0.72, 18), (0.86, 26), (0.95, 34)):
+        c, amp = round(frac * n), h + random.uniform(-3, 3)
+        for i in range(max(0, c - 4), min(n, c + 5)):
+            d = i - c
+            data[i] = max(data[i], base + amp * math.exp(-(d * d) / 2.0))
+    mid = round(0.5 * n)
+    data[mid] = max(data[mid], -50 + random.uniform(-2, 2))
+    _SPECTRUM_SEQ[0] += 1
+    return {
+        "seq": _SPECTRUM_SEQ[0], "age_ms": 0, "startfreq": start, "step": step,
+        "n": n, "noisefloor": -110, "peak": 403.0, "interval": 60,
+        "status": "idle", "data": [round(v, 1) for v in data],
+    }
+
+
 def make_handler(root):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -242,6 +269,9 @@ def make_handler(root):
             }
             if path in generated:
                 self._send(200, "text/html", generated[path](PLACEHOLDERS["%VERSION_ID%"]))
+                return
+            if path == "/spectrum.json":
+                self._send(200, "application/json", json.dumps(gen_spectrum()))
                 return
             if path in MOCK_JSON:
                 self._send(200, "application/json", json.dumps(MOCK_JSON[path]))
