@@ -32,7 +32,8 @@ void ConnSondeseeker::updateSonde(SondeInfo *si) {
     char buf[1024];
 
     strcpy(buf, "{\"sonde\": {");
-    sonde2json(buf + strlen(buf), 1024, si);
+    // reserve 3 bytes for the trailing "}}" and NUL appended by strcat below
+    sonde2json(buf + strlen(buf), sizeof(buf) - strlen(buf) - 3, si);
     strcat(buf, "}}");
 
     //Serial.printf("Sending Sondeseeker json: %s\n", buf);
