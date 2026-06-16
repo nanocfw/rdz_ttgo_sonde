@@ -804,7 +804,7 @@ void ILI9225Display::drawQS(uint16_t x, uint16_t y, uint8_t len, uint8_t size, u
 ///////////////
 
 
-char Display::buf[17];
+char Display::buf[80];
 char Display::lineBuf[Display::LINEBUFLEN];
 
 RawDisplay *Display::rdis = NULL;
@@ -1359,7 +1359,7 @@ void Display::drawHS(DispEntry *de) {
 	if(!is_ms) hs = hs * 3.6;
 	boolean has_extra = (de->extra && de->extra[1]!=0)? true: false;
 	snprintf(buf, 16, hs>99?" %3.0f":" %2.1f", hs);
-	if(has_extra) { strcat(buf, de->extra+1); }
+	if(has_extra) { strncat(buf, de->extra+1, sizeof(buf)-strlen(buf)-1); }
 	drawString(de,buf+strlen(buf)-4- (has_extra?strlen(de->extra+1):0) );
 	if(!has_extra) rdis->drawTile(de->x+4,de->y,2,is_ms?ms_tiles:kmh_tiles);
 }
@@ -1371,7 +1371,7 @@ void Display::drawVS(DispEntry *de) {
 	}
 	snprintf(buf, 16, "  %+2.1f", sonde.si()->d.vs);
 	LOG_D(TAG, "drawVS: extra is %s width=%d\n", de->extra?de->extra:"<null>", de->width);
-	if(de->extra) { strcat(buf, de->extra); }
+	if(de->extra) { strncat(buf, de->extra, sizeof(buf)-strlen(buf)-1); }
 	drawString(de, buf+strlen(buf)-5- (de->extra?strlen(de->extra):0) );
 	if(!de->extra) rdis->drawTile(de->x+5,de->y,2,ms_tiles);
 }
@@ -1480,7 +1480,7 @@ void Display::drawSite(DispEntry *de) {
 			//drawString(de, sonde.si()->launchsite);
 			//return;
 	}
-	if(de->extra[0]) strcat(buf, de->extra+1);
+	if(de->extra[0]) strncat(buf, de->extra+1, sizeof(buf)-strlen(buf)-1);
 	drawString(de, buf);
 }
 void Display::drawTelemetry(DispEntry *de) {
@@ -1492,7 +1492,7 @@ void Display::drawTelemetry(DispEntry *de) {
 			value = sonde.si()->d.temperature;
 			if(!isnan(value)) {
 				sprintf(buf, "%5.1f", value);
-				strcat(buf, de->extra+1);
+				strncat(buf, de->extra+1, sizeof(buf)-strlen(buf)-1);
 			}
 			buf[5+strlen(de->extra+1)] = 0;
 			break;
@@ -1501,7 +1501,7 @@ void Display::drawTelemetry(DispEntry *de) {
 			if(!isnan(value)) {
 				if(value>=1000) sprintf(buf, "%6.1f", value);
 				else sprintf(buf, "%6.2f", value);
-				strcat(buf, de->extra+1);
+				strncat(buf, de->extra+1, sizeof(buf)-strlen(buf)-1);
 			}
 			buf[6+strlen(de->extra+1)] = 0;
 			break;
@@ -1509,7 +1509,7 @@ void Display::drawTelemetry(DispEntry *de) {
 			value = sonde.si()->d.relativeHumidity;
 			if(!isnan(value)) {
 				sprintf(buf, "%4.1f", value);
-				strcat(buf, de->extra+1);
+				strncat(buf, de->extra+1, sizeof(buf)-strlen(buf)-1);
 			}
 			buf[4+strlen(de->extra+1)] = 0;
 			break;
@@ -1517,7 +1517,7 @@ void Display::drawTelemetry(DispEntry *de) {
 			value = sonde.si()->d.batteryVoltage;
 			if(!isnan(value)) {
 				snprintf(buf, 5, "%4.2f", value);
-				strcat(buf, de->extra+1);
+				strncat(buf, de->extra+1, sizeof(buf)-strlen(buf)-1);
 			}
 			buf[5+strlen(de->extra+1)] = 0;
 			break;
@@ -1552,7 +1552,7 @@ void Display::drawKilltimer(DispEntry *de) {
 			break;
 	}
 	if(de->extra[1])
-		strcat(buf, de->extra+2);
+		strncat(buf, de->extra+2, sizeof(buf)-strlen(buf)-1);
 	drawString(de, buf);
 }
 #define EARTH_RADIUS (6371000.0F)
