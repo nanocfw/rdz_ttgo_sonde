@@ -470,7 +470,9 @@ void Sonde::setConfig(const char *cfg) {
 		{
 			int idx = 0;
 			char *ptr;
-			while(val) {
+			// config.display is int8_t[30]; leave room for the -1 terminator
+			int dispmax = (int)(sizeof(config.display)/sizeof(config.display[0])) - 1;
+			while(val && idx < dispmax) {
 				ptr = strchr(val,',');
 				if(ptr) *ptr = 0;
 				config.display[idx++] = atoi(val);
