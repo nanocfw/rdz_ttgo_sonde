@@ -3466,6 +3466,7 @@ void execOTA() {
   if (!client.connect(updateHost, updatePort)) {
     LOG_E(TAG, "Connection to %s:%d for fs update failed\n", updateHost, updatePort);
     enterMode(ST_DECODER);
+    return;
   }
 
   // First, try update file system
