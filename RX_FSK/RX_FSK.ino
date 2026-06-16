@@ -362,8 +362,12 @@ void setupChannelList() {
       type = STYPE_MP3H;
     }
     else continue;
-    int active = space[3] == '+' ? 1 : 0;
-    if (space[4] == ' ') {
+    // active flag (space[3]) and launch site (space[5..]) are optional and only
+    // present on longer lines; guard the reads against the real line length so we
+    // do not read past the line terminator into the String's reserve capacity.
+    int rest = line.length() - (int)(space - line.c_str());
+    int active = (rest >= 4 && space[3] == '+') ? 1 : 0;
+    if (rest >= 5 && space[4] == ' ') {
       memset(launchsite, ' ', 16);
       strncpy(launchsite, space + 5, 16);
       if (sonde.config.debug == 1) {
