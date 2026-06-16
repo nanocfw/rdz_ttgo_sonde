@@ -313,6 +313,7 @@ typedef struct st_rdzconfig {
 	char mdnsname[15];		// mDNS-Name, defaults to rdzsonde
 	// receiver configuration
 	int freqofs;			// frequency offset (tuner config = rx frequency + freqofs) in Hz
+	int lnaboost;			// LnaBoostHf (RegLna 0x0C bits 1-0): 0=default LNA current, 1=boost on (150%)
 	struct st_rs41config rs41;	// configuration options specific for RS41 receiver
 	struct st_rs92config rs92;
 	struct st_dfmconfig dfm;

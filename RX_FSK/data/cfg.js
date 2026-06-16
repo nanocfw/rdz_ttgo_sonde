@@ -24,6 +24,7 @@ var cfgs = [
 [ "noisefloor", "Spectrum noisefloor" ],
 [ "", "Receiver configuration", "https://github.com/dl9rdz/rdz_ttgo_sonde/wiki/Receiver-configuration" ],
 [ "freqofs", "RX frequency offset (Hz)"],
+[ "lnaboost", "LNA current boost (0=default, 1=150%; useful without external LNA)"],
 [ "rs41.agcbw", "RS41 AGC bandwidth"],
 [ "rs41.rxbw", "RS41 RX bandwidth"],
 [ "rs92.rxbw", "RS92 RX (and AGC) bandwidth"],

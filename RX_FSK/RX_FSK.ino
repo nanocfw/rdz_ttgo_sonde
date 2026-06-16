@@ -837,6 +837,7 @@ struct st_configitems config_list[] = {
   {"noisefloor", 0, &sonde.config.noisefloor},
   /* decoder settings */
   {"freqofs", 0, &sonde.config.freqofs},
+  {"lnaboost", 0, &sonde.config.lnaboost},
   {"rs41.agcbw", 0, &sonde.config.rs41.agcbw},
   {"rs41.rxbw", 0, &sonde.config.rs41.rxbw},
   {"rs92.rxbw", 0, &sonde.config.rs92.rxbw},
@@ -2458,6 +2459,15 @@ void setup()
 
   //sx1278.setLNAGain(-48);
   sx1278.setLNAGain(0);
+
+  // Optionally enable LnaBoostHf (RegLna 0x0C bits 1-0 = 0b11 -> 150% LNA current).
+  // AGC (enabled for some sonde types) only controls the LnaGain field (bits 7-5),
+  // it leaves these boost bits untouched, so setting it once here is sufficient.
+  // Mainly useful when no external LNA is present (config option "lnaboost").
+  if (sonde.config.lnaboost) {
+    uint8_t lna = sx1278.readRegister(REG_LNA);
+    sx1278.writeRegister(REG_LNA, lna | 0x03);
+  }
 
   int gain = sx1278.getLNAGain();
   Serial.print("RX LNA Gain is ");
