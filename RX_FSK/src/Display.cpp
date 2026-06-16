@@ -315,6 +315,7 @@ void U8x8Display::drawString(uint16_t x, uint16_t y, const char *s, int16_t widt
 	char buf[50];
 	utf2latin15(s, buf, 50);
 	if(width!=WIDTH_AUTO && width>0) {
+		if(width > 49) width = 49;	// clamp to buf[50] (leave room for NUL)
 		for(int l = strlen(buf); l<width; l++) {
 			buf[l] = ' ';
 		}
@@ -322,7 +323,10 @@ void U8x8Display::drawString(uint16_t x, uint16_t y, const char *s, int16_t widt
 	}
 	if(width<0) {
 		int l = strlen(buf);
-		memset(buf, ' ', -width-l);
+		int pad = -width - l;		// leading spaces for right-justify
+		if(pad < 0) pad = 0;		// text already wider than field
+		if(pad > 49) pad = 49;		// clamp to buf[50]
+		memset(buf, ' ', pad);
 		utf2latin15(s, buf+l, 50-l);
 	}
 	u8x8->drawString(x, y, buf);
