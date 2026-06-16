@@ -555,6 +555,7 @@ int M10M20::decodeframeM20(uint8_t *data) {
 
 	frl = data[0] + 1;     // frame len? (0x45+1 => 70)
 	if(frl>M20_FRAMELEN) { frl = M20_FRAMELEN; }
+	if(frl<2) { frl = 2; }	// crcpos = frl-2 must be >= 0 (a corrupt data[0]==0 gave data[-1])
 	do {
 		crcok = checkM10M20crc(frl-2, data);
 		if(crcok || repairstep == 0) break;
