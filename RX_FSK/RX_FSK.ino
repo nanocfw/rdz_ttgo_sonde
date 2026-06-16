@@ -635,7 +635,8 @@ const char *handleQRGPost(AsyncWebServerRequest * request) {
     if (!type) continue;
     String fstring = freq->value();
     String tstring = type->value();
-    String sstring = launchsite->value();
+    // launchsite (S%d) is optional in the POST; default to empty if missing
+    String sstring = launchsite ? launchsite->value() : String("");
     const char *fstr = fstring.c_str();
     const char *tstr = tstring.c_str();
     const char *sstr = sstring.c_str();
