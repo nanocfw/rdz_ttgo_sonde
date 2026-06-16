@@ -15,7 +15,8 @@
 // Upon receiving correct authenticator, TTGO generates session ID and replaces preauth ticket with session ID in internal cookie store
 // (i.e. preauth ticket can be used only once)
 // TODO (optional) restrict session ID to specific client ID
-// TODO (maybe) update session ID expiration when being used (i.e. expire only after X minutes of idle?)
+// Session expiry is a sliding idle timeout: each valid request refreshes the expiry, so a
+// session only ends after COOKIE_EXPIRY_DURATION of inactivity (see getCookieAuthLevel).
 
 // USERLEN, RNDLEN and COOKIE_SIZE are defined in user.h
 
@@ -106,6 +107,12 @@ int getCookieAuthLevel(const char *cookie) {
     if (strcmp(authCookies[i].value, cookie) == 0) {
       // Signed difference handles millis() wraparound (~49 days uptime) correctly.
       if ((long)(now - authCookies[i].expiry) < 0) {
+        // Sliding idle timeout: refresh expiry on every valid use so the session only
+        // expires after COOKIE_EXPIRY_DURATION of inactivity (preauth tickets keep their
+        // short, single-use lifetime and are never extended here).
+        if (authCookies[i].userclass != -1) {
+          authCookies[i].expiry = now + COOKIE_EXPIRY_DURATION;
+        }
         return authCookies[i].userclass; // Valid and not expired
       } else {
         // Cookie expired, remove it
