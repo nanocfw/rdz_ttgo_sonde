@@ -2747,7 +2747,7 @@ void loopDecoder() {
     while (rdzclient.available()) {
       char c = (char)rdzclient.read();
       Serial.print(c);
-      if (c == '\n' || c == '}' || rdzDataPos >= RDZ_DATA_LEN) {
+      if (c == '\n' || c == '}' || rdzDataPos >= RDZ_DATA_LEN - 1) {
         // parse GPS position from phone
         rdzData[rdzDataPos] = c;
         if (rdzDataPos > 2) parseGpsJson(rdzData, rdzDataPos + 1);
