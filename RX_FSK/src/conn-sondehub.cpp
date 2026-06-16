@@ -505,7 +505,9 @@ void ConnSondehub::updateStation( PosInfo *pi ) {
     w = data;
     // not necessary...  memset(w, 0, STATION_DATA_LEN);
 
-    sprintf(w,
+    // helper: remaining space in data[] from the current write cursor
+    #define SH_REMAIN (STATION_DATA_LEN - (int)(w - data))
+    snprintf(w, SH_REMAIN,
             "{"
             "\"software_name\": \"%s\","
             "\"software_version\": \"%s\","
@@ -515,25 +517,25 @@ void ConnSondehub::updateStation( PosInfo *pi ) {
 
     // Only send email if provided
     if (strlen(conf->email) != 0) {
-        sprintf(w, "\"uploader_contact_email\": \"%s\",", conf->email);
+        snprintf(w, SH_REMAIN, "\"uploader_contact_email\": \"%s\",", conf->email);
         w += strlen(w);
     }
 
     // Only send antenna if provided
     if (strlen(conf->antenna) != 0) {
-        sprintf(w, "\"uploader_antenna\": \"%s\",", conf->antenna);
+        snprintf(w, SH_REMAIN, "\"uploader_antenna\": \"%s\",", conf->antenna);
         w += strlen(w);
     }
 
     // We send GPS position: (a) in CHASE mode, (b) in AUTO mode if no fixed location has been specified in config
     if (chase == SH_LOC_CHASE) {
         if (gpsPos.valid) {
-            sprintf(w,
+            snprintf(w, SH_REMAIN,
                     "\"uploader_position\": [%.6f,%.6f,%d],"
                     "\"mobile\": true",
                     gpsPos.lat, gpsPos.lon, gpsPos.alt);
         } else {
-            sprintf(w, "\"uploader_position\": [null,null,null]");
+            snprintf(w, SH_REMAIN, "\"uploader_position\": [null,null,null]");
         }
         w += strlen(w);
     }
@@ -541,20 +543,21 @@ void ConnSondehub::updateStation( PosInfo *pi ) {
     else if (chase == SH_LOC_FIXED) {
         if ((!isnan(sonde.config.rxlat)) && (!isnan(sonde.config.rxlon))) {
             if (isnan(sonde.config.rxalt))
-                sprintf(w, "\"uploader_position\": [%.6f,%.6f,null]", sonde.config.rxlat, sonde.config.rxlon);
+                snprintf(w, SH_REMAIN, "\"uploader_position\": [%.6f,%.6f,null]", sonde.config.rxlat, sonde.config.rxlon);
             else
-                sprintf(w, "\"uploader_position\": [%.6f,%.6f,%d]", sonde.config.rxlat, sonde.config.rxlon, (int)sonde.config.rxalt);
+                snprintf(w, SH_REMAIN, "\"uploader_position\": [%.6f,%.6f,%d]", sonde.config.rxlat, sonde.config.rxlon, (int)sonde.config.rxalt);
         } else {
-            sprintf(w, "\"uploader_position\": [null,null,null]");
+            snprintf(w, SH_REMAIN, "\"uploader_position\": [null,null,null]");
         }
         w += strlen(w);
     } else {
-        sprintf(w, "\"uploader_position\": [null,null,null]");
+        snprintf(w, SH_REMAIN, "\"uploader_position\": [null,null,null]");
         w += strlen(w);
     }
 
     // otherwise (in SH_LOC_NONE mode) we dont include any position info
-    sprintf(w, "}");
+    snprintf(w, SH_REMAIN, "}");
+    #undef SH_REMAIN
 
     dprintf( shclient, "PUT /listeners HTTP/1.1\r\n"
             "Host: %s\r\n"
