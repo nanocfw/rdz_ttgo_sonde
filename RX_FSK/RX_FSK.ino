@@ -376,7 +376,13 @@ void setupChannelList() {
   file.close();
 }
 
-const char *HTMLHEAD = "<!DOCTYPE html><html><head> <meta charset=\"UTF-8\"> <link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\">";
+// Emit the standard HTML head into ptr, version-tagging style.css (?v=<version_id>) so browsers
+// refetch it whenever the firmware version changes. The static handlers cache assets aggressively
+// (max-age) as a network-stack workaround, so the query string is what busts that cache on update.
+void HTMLHEAD_V(char *ptr) {
+  sprintf(ptr, "<!DOCTYPE html><html><head> <meta charset=\"UTF-8\"> "
+               "<link rel=\"stylesheet\" type=\"text/css\" href=\"style.css?v=%s\">", version_id);
+}
 void HTMLBODY_OS(char *ptr, const char *which, const char *onsubmit) {
   strcat(ptr, "<body><form class=\"wrapper\" action=\"");
   strcat(ptr, which);
@@ -576,8 +582,8 @@ const char *getQRGAsJson() {
 
 const char *createQRGForm(int level) {
   char *ptr = message;
-  strcpy(ptr, HTMLHEAD);
-  strcat(ptr, "<script src=\"rdz.js\"></script><script src=\"dialog.js\"></script></head>");
+  HTMLHEAD_V(ptr);
+  sprintf(ptr + strlen(ptr), "<script src=\"rdz.js?v=%s\"></script><script src=\"dialog.js?v=%s\"></script></head>", version_id, version_id);
   HTMLBODY(ptr, "qrg.html");
   //strcat(ptr, "<body><form class=\"wrapper\" action=\"qrg.html\" method=\"post\"><div class=\"content\"><table><tr><th>ID</th><th>Active</th><th>Freq</th><th>Launchsite</th><th>Mode</th></tr>");
   strcat(ptr, "<script>\nvar qrgs = [];\n");
@@ -718,8 +724,8 @@ const String quoteString(const char *s) {
 const char *createWIFIForm() {
   char *ptr = message;
   char tmp[4];
-  strcpy(ptr, HTMLHEAD);
-  strcat(ptr, "<script src=\"rdz.js\"></script></head>");
+  HTMLHEAD_V(ptr);
+  sprintf(ptr + strlen(ptr), "<script src=\"rdz.js?v=%s\"></script></head>", version_id);
   HTMLBODY(ptr, "wifi.html");
   strcat(ptr, "<table><tr><th>Nr</th><th>SSID</th><th>Password</th></tr>");
   for (int i = 0; i < MAX_WIFI; i++) {
@@ -808,7 +814,7 @@ void addSondeStatus(char *ptr, int i)
 
 const char *createStatusForm() {
   char *ptr = message;
-  strcpy(ptr, HTMLHEAD);
+  HTMLHEAD_V(ptr);
   strcat(ptr, "<meta http-equiv=\"refresh\" content=\"5\"></head>");
   HTMLBODY(ptr, "status.html");
   strcat(ptr, "<div class=\"content\">");
@@ -1013,11 +1019,11 @@ const int N_CONFIG = (sizeof(config_list) / sizeof(struct st_configitems));
 
 const char *createConfigForm(int level) {
   char *ptr = message;
-  strcpy(ptr, HTMLHEAD);
-  strcat(ptr, "<script src=\"rdz.js\"></script><script src=\"dialog.js\"></script></head>");
+  HTMLHEAD_V(ptr);
+  sprintf(ptr + strlen(ptr), "<script src=\"rdz.js?v=%s\"></script><script src=\"dialog.js?v=%s\"></script></head>", version_id, version_id);
   HTMLBODY_OS(ptr, "config.html", "return checkForDuplicates(this)");
   strcat(ptr, "<div id=\"cfgtab\"></div>");
-  strcat(ptr, "<script src=\"cfg.js\"></script>");
+  sprintf(ptr + strlen(ptr), "<script src=\"cfg.js?v=%s\"></script>", version_id);
   strcat(ptr, "<script>\n");
   sprintf(ptr + strlen(ptr), "var scr=\"Using /screens%d.txt", Display::getScreenIndex(sonde.config.screenfile));
   for (int i = 0; i < disp.nLayouts; i++) {
@@ -1144,7 +1150,7 @@ const char *ctrllabel[] = {"Receiver/next freq. (short keypress)", "Scanner (dou
 
 const char *createControlForm() {
   char *ptr = message;
-  strcpy(ptr, HTMLHEAD);
+  HTMLHEAD_V(ptr);
   strcat(ptr, "</head>");
   HTMLBODY(ptr, "control.html");
   for (int i = 0; i < sizeof(ctrllabel)/sizeof((ctrllabel)[0]); i++) {
@@ -1373,7 +1379,7 @@ const char *handleEditPost(AsyncWebServerRequest * request) {
 // will be removed. its now in data/upd.html (for GET; POST to update.html still handled here)
 const char *createUpdateForm(boolean run) {
   char *ptr = message;
-  strcpy(ptr, "<!DOCTYPE html><html><head><link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\"></head><body><form action=\"update.html\" method=\"post\">");
+  sprintf(ptr, "<!DOCTYPE html><html><head><link rel=\"stylesheet\" type=\"text/css\" href=\"style.css?v=%s\"></head><body><form action=\"update.html\" method=\"post\">", version_id);
   if (run) {
     strcat(ptr, "<p>Doing update, wait until reboot</p>");
   } else {
