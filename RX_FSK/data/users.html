@@ -28,7 +28,13 @@
         <option value="2" selected>2 &ndash; full access</option>
       </select>
     </label><br><br>
-    <label>Password: <input type="password" id="p" required></label><br><br>
+    <label>Password: <input type="password" id="p" required></label>
+    <button type="button" id="tp" title="Show password" aria-label="Show password"
+            style="border:none;background:none;cursor:pointer;font-size:1.1em;">&#128065;</button><br><br>
+    <label>Confirm password: <input type="password" id="p2" required></label>
+    <button type="button" id="tp2" title="Show password" aria-label="Show password"
+            style="border:none;background:none;cursor:pointer;font-size:1.1em;">&#128065;</button>
+    <span id="pmsg" style="margin-left:1em;color:#c00;"></span><br><br>
     <button type="submit">Save</button>
     <span id="msg" style="margin-left:1em;"></span>
   </form>
@@ -48,6 +54,32 @@ function applyBootstrapMode() {
   sel.disabled = first;
   document.getElementById('bootstrapNote').style.display = first ? 'block' : 'none';
 }
+
+function makeReveal(btnId, fieldId) {
+  // Toggle a single password field between hidden/visible; swap the icon to show state.
+  const btn = document.getElementById(btnId);
+  const fld = document.getElementById(fieldId);
+  btn.addEventListener('click', function() {
+    const show = fld.type === 'password';
+    fld.type = show ? 'text' : 'password';
+    btn.innerHTML = show ? '&#128584;' : '&#128065;';   // see-no-evil / eye
+    btn.title = show ? 'Hide password' : 'Show password';
+    btn.setAttribute('aria-label', btn.title);
+  });
+}
+makeReveal('tp', 'p');
+makeReveal('tp2', 'p2');
+
+function checkMatch() {
+  // Live hint: only complain once both fields have content and they differ.
+  const p = document.getElementById('p').value;
+  const p2 = document.getElementById('p2').value;
+  const mismatch = p && p2 && p !== p2;
+  document.getElementById('pmsg').textContent = mismatch ? 'Passwords do not match' : '';
+  return !mismatch;
+}
+document.getElementById('p').addEventListener('input', checkMatch);
+document.getElementById('p2').addEventListener('input', checkMatch);
 
 function loadUsers() {
   fetch('/users.json').then(r => r.json()).then(list => {
@@ -94,6 +126,11 @@ document.getElementById('addForm').addEventListener('submit', function(e) {
   const u = document.getElementById('u').value;
   const l = wasFirst ? '2' : document.getElementById('l').value;
   const p = document.getElementById('p').value;
+  const p2 = document.getElementById('p2').value;
+  if (p !== p2) {
+    document.getElementById('pmsg').textContent = 'Passwords do not match';
+    return;
+  }
   post('action=add&user=' + encodeURIComponent(u) +
        '&level=' + encodeURIComponent(l) +
        '&pass=' + encodeURIComponent(p))
@@ -104,6 +141,8 @@ document.getElementById('addForm').addEventListener('submit', function(e) {
         return;
       }
       document.getElementById('p').value = '';
+      document.getElementById('p2').value = '';
+      document.getElementById('pmsg').textContent = '';
       if (wasFirst) {
         // The device just locked down user management; the operator must now authenticate.
         alert('Account "' + u + '" created as administrator.\n\n' +
