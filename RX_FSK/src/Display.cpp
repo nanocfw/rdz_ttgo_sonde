@@ -917,6 +917,7 @@ void Display::parseDispElement(char *text, DispEntry *de)
 		case 'q':
 			{
 				struct StatInfo *statinfo = (struct StatInfo *)malloc(sizeof(struct StatInfo));
+				if(!statinfo) break;  // out of memory: leave func NULL so this entry is skipped
 				// maybe enable more flexible configuration?
 				statinfo->size=3;
 				statinfo->len=18;
@@ -962,6 +963,7 @@ void Display::parseDispElement(char *text, DispEntry *de)
 			if(text[1]=='0') {  
 				// extended configuration for arrow...
 				struct CircleInfo *circinfo = (struct CircleInfo *)malloc(sizeof(struct CircleInfo));
+				if(!circinfo) { de->func = NULL; break; }  // out of memory: skip this entry, drawGPS would deref extra
 #if 1
 				circinfo->type = '0';
 				circinfo->top = text[2];
@@ -1671,6 +1673,7 @@ void Display::drawGPS(DispEntry *de) {
 				if(border<7) border=7; // space for "N" label
 				int size = 1 + 2*circinfo->radius + 2*border;
 				uint16_t *bitmap = (uint16_t *)malloc(sizeof(uint16_t) * size * size);
+				if(!bitmap) break;  // out of memory: skip drawing the GPS circle
 				LOG_D(TAG, "Drawing circle with size %d at %d,%d\n",size,de->x, de->y);
 				for(int i=0; i<size*size; i++) { bitmap[i] = 0; }
 				// draw circle
