@@ -158,18 +158,24 @@ void MQTT::publishUptime()
 
     // maybe TODO: Use dynamic position if GPS is available?
     // rxlat, rxlon only if not empty
-    snprintf(payload, 256,
+    // Build the JSON incrementally with a running offset. Passing payload as
+    // both destination and a %s source argument (as before) is undefined
+    // behaviour for overlapping copies and could corrupt the message.
+    int n = snprintf(payload, 256,
         "{\"uptime\": %.1f, \"user\": \"%s\", \"time\": \"%s\",",
         millis() / 1000.0, sonde.config.mqtt.username, time_str );
+    if (n < 0) n = 0; else if (n > 255) n = 255;
 
     if (!isnan(sonde.config.rxlat) && !isnan(sonde.config.rxlon)) {
-        snprintf(payload, 256,
-            "%s \"rxlat\": %.5f, \"rxlon\": %.5f,",
-            payload, sonde.config.rxlat, sonde.config.rxlon);
+        int m = snprintf(payload + n, 256 - n,
+            " \"rxlat\": %.5f, \"rxlon\": %.5f,",
+            sonde.config.rxlat, sonde.config.rxlon);
+        if (m > 0) n += m;
+        if (n > 255) n = 255;
     }
-    snprintf(payload, 256,
-        "%s \"SW\": \"%s\", \"VER\": \"%s\"}",
-        payload, version_name, version_id);
+    snprintf(payload + n, 256 - n,
+        " \"SW\": \"%s\", \"VER\": \"%s\"}",
+        version_name, version_id);
     LOG_D(TAG, "publishUptime: sending %s\n", payload);
     char topic[128];
     snprintf(topic, 128, "%s%s", sonde.config.mqtt.prefix, "uptime");
