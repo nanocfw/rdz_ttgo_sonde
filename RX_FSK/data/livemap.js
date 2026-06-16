@@ -321,15 +321,16 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
       $("#settings").slideUp();
       get_predict(last_data);
     } else {
-      alert('Error: only numeric values allowed!');
+      showAlert('Error: only numeric values allowed!');
     }
   };
-  
+
   settings_reset = function() {
-    if (confirm('Reset to default?')) {
+    showConfirm('Reset to default?').then(function(ok) {
+      if (!ok) return;
       settings_write(settings_std);
       show_settings();
-    }
+    });
   };
 
   show_settings = function() {

@@ -19,6 +19,7 @@
         .modalContent th, .modalContent td { padding: 4px 8px; border: 1px solid #ddd; }
         .modalContent th { background: #4CAF50; color: #fff; }
     </style>
+    <script src="dialog.js"></script>
 </head>
 <body>
     <div id="viewModal">
@@ -96,11 +97,12 @@
             deleteBtn.title = 'Delete';
             deleteBtn.style.cursor = 'pointer';
             deleteBtn.onclick = () => {
-                if (confirm(`Confirm to delete "${file.name}"?`)) {
+                showConfirm(`Confirm to delete "${file.name}"?`).then(ok => {
+                    if (!ok) return;
                     fetch(`sdrm.html?file=${pdir}${encodeURIComponent(file.name)}`)
-                        .then(resp => resp.ok ? (alert('Deleted.'), row.remove()) : alert('Delete failed.'))
-                        .catch(() => alert('Error sending request.'));
-                }
+                        .then(resp => resp.ok ? (showAlert('Deleted.'), row.remove()) : showAlert('Delete failed.'))
+                        .catch(() => showAlert('Error sending request.'));
+                });
             };
             deleteCell.appendChild(deleteBtn);
 

@@ -4,6 +4,81 @@ body, html {
 	font-family: Arial;
 }
 
+/* Modal dialogs (dialog.js) -- replaces native alert()/confirm().
+   Styled to resemble SweetAlert2's default theme (centered card, bounce-in,
+   indigo confirm + grey cancel) without bundling the library. */
+.modal-overlay {
+	position: fixed;
+	top: 0; right: 0; bottom: 0; left: 0;
+	z-index: 1060;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.4);
+	animation: modalFade 0.15s ease-out;
+}
+.modal-box {
+	background: #fff;
+	color: #545454;
+	width: auto;
+	min-width: 15em;
+	max-width: 26em;
+	border-radius: 14px;
+	padding: 1.75em 1.75em 1.4em;
+	box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
+	font-family: Arial, sans-serif;
+	font-size: 16px;
+	text-align: center;
+	animation: modalPop 0.3s;
+}
+.modal-msg {
+	white-space: pre-line;
+	line-height: 1.55;
+	font-size: 1.125em;
+	color: #545454;
+	margin: 0 0 1.5em;
+}
+.modal-actions {
+	display: flex;
+	flex-direction: row-reverse;   /* confirm on the left, cancel on the right (SweetAlert2 order) */
+	justify-content: center;
+	gap: 0.6em;
+}
+.modal-btn {
+	border: 0;
+	border-radius: 0.25em;
+	padding: 0.625em 1.6em;
+	font-size: 1em;
+	font-weight: 500;
+	color: #fff;
+	cursor: pointer;
+	transition: background-color .15s, box-shadow .15s;
+}
+.modal-btn:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 3px rgba(112, 102, 224, 0.5);
+}
+.modal-btn-primary { background-color: #7066e0; }
+.modal-btn-primary:hover { background-color: #5f55d6; }
+.modal-btn-primary:active { background-color: #564dcc; }
+.modal-btn-cancel { background-color: #6e7881; }
+.modal-btn-cancel:hover { background-color: #5f686f; }
+.modal-btn-cancel:active { background-color: #545c62; }
+.modal-btn-cancel:focus-visible { box-shadow: 0 0 0 3px rgba(110, 120, 129, 0.5); }
+
+@keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
+/* SweetAlert2's signature show animation (swal2-show) */
+@keyframes modalPop {
+	0%   { transform: scale(0.7); }
+	45%  { transform: scale(1.05); }
+	80%  { transform: scale(0.95); }
+	100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.modal-overlay, .modal-box { animation: none; }
+}
+
 .system-info {
     padding: 20px;
     font-family: Arial, sans-serif;

@@ -12,6 +12,7 @@
         if (window.top !== window.self) { window.top.location.href = "/login.html"; }
     </script>
     <script src="sha256.min.js" type="text/javascript"></script>
+    <script src="dialog.js" type="text/javascript"></script>
     <script>
         function computeHash(event) {
             event.preventDefault(); // Prevent form's default submission behavior
@@ -27,13 +28,12 @@
             fetch('/login.html', { method: 'POST', body: body, credentials: 'same-origin' })
                 .then(resp => {
                     if (resp.ok) { window.location.href = '/index.html'; return; }
-                    // The preauth nonce is single-use/short-lived, so reload to get a fresh one.
                     return resp.text().then(msg => {
-                        alert(msg || 'Login failed');
-                        window.location.reload();
+                        // The preauth nonce is single-use/short-lived, so reload for a fresh one.
+                        showAlert(msg || 'Login failed').then(() => window.location.reload());
                     });
                 })
-                .catch(() => { alert('Login failed (network error)'); });
+                .catch(() => { showAlert('Login failed (network error)'); });
         }
     </script>
 </head>

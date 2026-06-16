@@ -972,8 +972,8 @@ const int N_CONFIG = (sizeof(config_list) / sizeof(struct st_configitems));
 const char *createConfigForm(int level) {
   char *ptr = message;
   strcpy(ptr, HTMLHEAD);
-  strcat(ptr, "<script src=\"rdz.js\"></script></head>");
-  HTMLBODY_OS(ptr, "config.html", "return checkForDuplicates()");
+  strcat(ptr, "<script src=\"rdz.js\"></script><script src=\"dialog.js\"></script></head>");
+  HTMLBODY_OS(ptr, "config.html", "return checkForDuplicates(this)");
   strcat(ptr, "<div id=\"cfgtab\"></div>");
   strcat(ptr, "<script src=\"cfg.js\"></script>");
   strcat(ptr, "<script>\n");

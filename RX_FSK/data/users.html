@@ -6,6 +6,7 @@
   <title>User Management</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" type="text/css" href="style.css">
+  <script src="dialog.js"></script>
 </head>
 <body>
 <div class="wrapper">
@@ -111,13 +112,15 @@ function post(body) {
 }
 
 function delUser(user) {
-  if (!confirm('Delete user "' + user + '"?')) return;
-  post('action=del&user=' + encodeURIComponent(user))
-    .then(r => r.text())
-    .then(t => {
-      document.getElementById('msg').textContent = (t === 'ok') ? 'Deleted.' : ('Error: ' + t);
-      loadUsers();
-    });
+  showConfirm('Delete user "' + user + '"?').then(function(ok) {
+    if (!ok) return;
+    post('action=del&user=' + encodeURIComponent(user))
+      .then(r => r.text())
+      .then(t => {
+        showAlert(t === 'ok' ? 'User "' + user + '" deleted.' : ('Error: ' + t));
+        loadUsers();
+      });
+  });
 }
 
 document.getElementById('addForm').addEventListener('submit', function(e) {
@@ -145,9 +148,9 @@ document.getElementById('addForm').addEventListener('submit', function(e) {
       document.getElementById('pmsg').textContent = '';
       if (wasFirst) {
         // The device just locked down user management; the operator must now authenticate.
-        alert('Account "' + u + '" created as administrator.\n\n' +
-              'User management now requires logging in. You will be redirected to the login page.');
-        window.top.location.href = '/login.html';
+        showAlert('Account "' + u + '" created as administrator.\n\n' +
+                  'User management now requires logging in. You will be redirected to the login page.')
+          .then(function() { window.top.location.href = '/login.html'; });
         return;
       }
       document.getElementById('msg').textContent = 'Saved.';

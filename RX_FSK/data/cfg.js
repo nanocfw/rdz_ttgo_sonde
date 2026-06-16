@@ -125,7 +125,7 @@ function isAllowedDup(nameA, nameB) {
    return false;
 }
 // Function to check for duplicate pins
-function checkForDuplicates() {
+function checkForDuplicates(form) {
     // Create an object to store values and their associated descriptions and names
     var valuesMap = {};
     var duplicates = [];
@@ -166,14 +166,15 @@ function checkForDuplicates() {
             message += "Pin " + duplicates[j].value + " in '" + duplicates[j].descA + "' and '" + duplicates[j].descB + "'\n";
         }
 
-        // Show a confirm popup to let the user decide whether to submit the form
-        if (!confirm(message + "\nDo you want to submit the form anyway?")) {
-            // If the user chooses to cancel, prevent the form submission
-            return false;
-        }
+        // Confirm asynchronously: block this submit, and re-submit programmatically if the
+        // user accepts. form.submit() does not re-fire onsubmit, so there is no loop.
+        showConfirm(message + "\nDo you want to submit the form anyway?").then(function(ok) {
+            if (ok) form.submit();
+        });
+        return false;
     }
 
-    // Allow form submission
+    // No duplicates: allow the form submission to proceed.
     return true;
 }
 
