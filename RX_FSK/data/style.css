@@ -608,9 +608,21 @@ h1{
     border-collapse: collapse;
     background-color: #333;
   }
-  input, select, .tci, .warning {
+  input, select, textarea, .tci, .warning {
     color: white;
-    background-color: #333;
+    background-color: #3a3a3a;
+  }
+  .content input[type="text"], .content input[type="password"],
+  .content input[type="number"], .content select, .content textarea,
+  #addForm input[type="text"], #addForm input[type="password"],
+  .system-info input[type="text"], .system-info input[type="password"] {
+    border: 1px solid #666;
+  }
+  .content input:focus, .content select:focus, .content textarea:focus,
+  #addForm input:focus, .system-info input:focus {
+    border-color: #04AA6D;
+    box-shadow: 0 0 0 3px rgba(4,170,109,.30);
+    outline: none;
   }
   a:link, a:visited {
     color: #D3D3D3;
@@ -707,7 +719,7 @@ h1{
   padding: 9px 12px;
   border: 1px solid #ccc;
   text-align: left;
-  vertical-align: top;
+  vertical-align: middle;   /* center labels against their (taller) input fields */
 }
 .content th { background-color: #f4f4f4; font-weight: bold; color: #000; }
 /* Right-size the Value column of the 2-column config table so each label sits
@@ -718,14 +730,49 @@ h1{
 .content td input[type="password"],
 .content td select { width: 100%; box-sizing: border-box; }
 .content td input[size] { width: auto; }
-/* A little padding so fields are easier to click/fill (no color change) */
+/* Consistent, modern field styling across every form (config/qrg/wifi/users/login):
+   subtle border, rounded corners, comfortable padding and a brand-green focus ring. */
 .content input[type="text"],
 .content input[type="password"],
 .content input[type="number"],
-.content select { padding: 5px 7px; box-sizing: border-box; }
-/* The hand-written Add/update user form (users.html) */
+.content select,
+.content textarea,
+#addForm input[type="text"],
+#addForm input[type="password"],
+.system-info input[type="text"],
+.system-info input[type="password"] {
+  padding: 7px 9px;
+  border: 1px solid #bbb;
+  border-radius: 5px;
+  font-size: 14px;
+  background-color: #fff;
+  color: #222;
+  box-sizing: border-box;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.content input[type="text"]:focus,
+.content input[type="password"]:focus,
+.content input[type="number"]:focus,
+.content select:focus,
+.content textarea:focus,
+#addForm input:focus,
+.system-info input:focus {
+  outline: none;
+  border-color: #04AA6D;
+  box-shadow: 0 0 0 3px rgba(4,170,109,.20);
+}
+/* Checkboxes (e.g. the config "Touch" toggles) adopt the brand colour. */
+.content input[type="checkbox"],
+#addForm input[type="checkbox"] {
+  accent-color: #04AA6D;
+  width: 16px; height: 16px;
+  vertical-align: middle;
+  cursor: pointer;
+}
+/* The hand-written Add/update user form (users.html) and the login form. */
 #addForm { max-width: 820px; margin: 0 auto; }
-#addForm input[type="text"], #addForm input[type="password"] { width: 16em; max-width: 100%; }
+#addForm input[type="text"], #addForm input[type="password"],
+#loginForm input[type="text"], #loginForm input[type="password"] { width: 16em; max-width: 100%; }
 
 /* Control page: a tidy centered stack of modern buttons. (They were plain grey
    and, at font-size:4vh, overflowed the centered column and got clipped.) */
