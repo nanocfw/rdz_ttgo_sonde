@@ -239,6 +239,7 @@ static void _sh_wait_cktimeout() {
     if(now - time_wait_start > (shclient_state==SH_CONN_WAITACK?TO_WAITACK:TO_WAITIMPORT)) {
         LOG_W(TAG, "timeout waiting for %s", shclient_state==SH_CONN_WAITACK?"ACK":"IMPORTRES");
         close(shclient);
+        shclient = -1;   // mark closed so netshutdown / later code can't double-close it
         shclient_state = SH_ERROR_RETRY;
         time_wait_start = 0;
         shStart = 0;
