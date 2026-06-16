@@ -7,6 +7,24 @@
   <link rel="icon" href="data:,">
   <link rel="stylesheet" type="text/css" href="style.css?v=%VERSION_ID%">
   <script src="dialog.js?v=%VERSION_ID%"></script>
+  <style>
+    /* Users page buttons: match the project's green-primary / subtle-icon system */
+    #addForm button[type="submit"] {
+      background-color:#04AA6D; color:#fff; border:none; border-radius:5px;
+      padding:8px 24px; font-size:14px; cursor:pointer; transition:background-color .3s ease;
+    }
+    #addForm button[type="submit"]:hover { background-color:#038f5b; }
+    #addForm button[type="submit"]:active { transform:translateY(1px); }
+    /* password reveal toggles: subtle icon, vertically aligned with the field */
+    .revealbtn {
+      border:none; background:none; cursor:pointer; font-size:1.1em;
+      line-height:1; padding:0 4px; color:#0F3376; vertical-align:middle;
+    }
+    /* the form action row: keep the Save button and its status message aligned */
+    .formactions { display:flex; align-items:center; gap:1em; margin-top:4px; }
+    /* action column in the user list */
+    #userTable td:last-child { text-align:center; white-space:nowrap; }
+  </style>
 </head>
 <body>
 <div class="wrapper">
@@ -29,14 +47,14 @@
       </select>
     </label><br><br>
     <label>Password: <input type="password" id="p" required></label>
-    <button type="button" id="tp" title="Show password" aria-label="Show password"
-            style="border:none;background:none;cursor:pointer;font-size:1.1em;">&#128065;</button><br><br>
+    <button type="button" id="tp" class="revealbtn" title="Show password" aria-label="Show password">&#128065;</button><br><br>
     <label>Confirm password: <input type="password" id="p2" required></label>
-    <button type="button" id="tp2" title="Show password" aria-label="Show password"
-            style="border:none;background:none;cursor:pointer;font-size:1.1em;">&#128065;</button>
+    <button type="button" id="tp2" class="revealbtn" title="Show password" aria-label="Show password">&#128065;</button>
     <span id="pmsg" style="margin-left:1em;color:#c00;"></span><br><br>
-    <button type="submit">Save</button>
-    <span id="msg" style="margin-left:1em;"></span>
+    <div class="formactions">
+      <button type="submit">Save</button>
+      <span id="msg"></span>
+    </div>
   </form>
   <p><small>Note: an existing username is overwritten. Passwords are stored in <code>/user.txt</code>.
      To change who can access without logging in, edit the first (empty-username) line of that file.</small></p>
