@@ -3035,6 +3035,9 @@ void WiFiEvent(WiFiEvent_t event)
 	break;
       }
       LOG_D(TAG, "Turning off (state is %d)\n", wifi_state);
+      // In AP mode (incl. the AUTO AP+STA fallback) a failed/dropped station
+      // attempt must NOT power off the radio -- that would also kill the AP.
+      if (wifi_state == WIFI_APMODE) break;
       WiFi.mode(WIFI_MODE_NULL);
       break;
     case ARDUINO_EVENT_WIFI_OFF:
@@ -3162,6 +3165,14 @@ void wifiConnectDirect(int16_t index) {
 
 static int wifi_cto;
 
+// Mode 5 (config.wifi==5) AP fallback: keep the AP up but retry the configured
+// station network in the background (AP+STA). On success the AP is dropped.
+#define AP_STA_RETRY_MS   120000UL   // gap between background station retry attempts
+#define AP_STA_CONNECT_MS  15000UL   // time allowed for each background connect attempt
+static unsigned long apsta_next_retry = 0;
+static unsigned long apsta_connect_deadline = 0;
+static int apsta_phase = 0;          // 0=waiting, 1=scanning, 2=connecting
+
 void loopWifiBackground() {
   LOG_D(TAG, "WifiBackground: state %d\n", wifi_state);
   // handle Wifi station mode in background
@@ -3217,12 +3228,73 @@ void loopWifiBackground() {
       enableNetwork(false);
       WiFi.disconnect(true);
     } //else Serial.println("WiFi still connected");
+  } else if (wifi_state == WIFI_APMODE) {
+    // Mode 5 AP fallback: periodically retry the configured station network in the
+    // background (AP+STA) without dropping the AP; once connected, drop the AP.
+    if (sonde.config.wifi != 5) return;   // only mode 5 retries; other AP modes stay put
+    unsigned long now = millis();
+    if (apsta_phase == 0) {                       // waiting for the next retry window
+      if ((long)(now - apsta_next_retry) < 0) return;
+      Serial.println("AP+STA: background station retry -- scanning");
+      WiFi.scanNetworks(true);                    // async scan, AP stays up
+      apsta_phase = 1;
+    } else if (apsta_phase == 1) {                // scan in progress
+      int16_t res = WiFi.scanComplete();
+      if (res == WIFI_SCAN_RUNNING) return;
+      apsta_phase = 0;
+      apsta_next_retry = now + AP_STA_RETRY_MS;    // schedule next window regardless
+      if (res <= 0) { WiFi.scanDelete(); return; } // failed/empty scan, try again later
+      // pick the strongest configured network that is in range
+      int bestEntry = -1; int bestRSSI = INT_MIN; int32_t bestChannel = 0;
+      uint8_t bestBSSID[6];
+      for (int i = 0; i < res; i++) {
+        String ssid; int32_t rssi; uint8_t sec; uint8_t *bssid; int32_t chan;
+        WiFi.getNetworkInfo(i, ssid, sec, rssi, bssid, chan);
+        int idx = fetchWifiIndex(ssid.c_str());
+        if (idx < 0 || rssi <= bestRSSI) continue;
+        bestEntry = idx; bestRSSI = rssi; bestChannel = chan;
+        memcpy(bestBSSID, bssid, sizeof(bestBSSID));
+      }
+      WiFi.scanDelete();
+      if (bestEntry < 0) return;                   // configured network not in range
+      LOG_I(TAG, "AP+STA: connecting to %s in background\n", fetchWifiSSID(bestEntry));
+      WiFi.begin(fetchWifiSSID(bestEntry), fetchWifiPw(bestEntry), bestChannel, bestBSSID);
+      apsta_phase = 2;
+      apsta_connect_deadline = now + AP_STA_CONNECT_MS;
+    } else if (apsta_phase == 2) {                // connect attempt in progress
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("AP+STA: station connected -- dropping AP");
+        WiFi.softAPdisconnect(true);              // drop the AP, keep the station link
+        WiFi.mode(WIFI_STA);
+        String localIPstr = WiFi.localIP().toString();
+        LOG_I(TAG, "IP is %s\n", localIPstr.c_str());
+        sonde.setIP(localIPstr.c_str(), false);
+        sonde.updateDisplayIP();
+        wifi_state = WIFI_CONNECTED;
+        enableNetwork(true);                       // rebind services to the station IP
+        apsta_phase = 0;
+      } else if ((long)(now - apsta_connect_deadline) >= 0) {
+        Serial.println("AP+STA: station retry timed out -- staying in AP mode");
+        WiFi.disconnect(false);                    // abort the STA attempt, keep the AP
+        apsta_phase = 0;
+        apsta_next_retry = now + AP_STA_RETRY_MS;
+      }
+    }
   }
 }
 
 void startAP() {
   Serial.println("Activating access point mode");
   wifi_state = WIFI_APMODE;
+  // Mode 5 keeps the station radio enabled (AP+STA) so it can retry the configured
+  // network in the background without dropping the AP; other modes run the AP alone.
+  if (sonde.config.wifi == 5) {
+    WiFi.mode(WIFI_AP_STA);
+    apsta_phase = 0;
+    apsta_next_retry = millis() + AP_STA_RETRY_MS;
+  } else {
+    WiFi.mode(WIFI_AP);
+  }
   WiFi.softAP(networks[0].id.c_str(), networks[0].pw.c_str());
 
   Serial.println("Wait 100 ms for AP_START...");
@@ -3279,6 +3351,7 @@ void loopTouchCalib() {
 // 2: access point mode (wait for clients in background)
 // 3: traditional sync. WifiScan. Tries to connect to a network, in case of failure activates AP.
 // 4: Station mode/hidden AP: same as 1, but instead of scan, just call espressif method to connect (will connect to hidden AP as well
+// 5: like 3, but keeps the AP up and retries the station connection in the background (AP+STA); drops the AP once the station connects
 #define MAXWIFIDELAY 40
 static const char* _scan[2] = {"/", "\\"};
 void loopWifiScan() {
@@ -3314,7 +3387,8 @@ void loopWifiScan() {
     break;
   case 1:  // STATION mode (continue in BG if no connection)
   case 3:  // old AUTO mode (change to AP if no connection)
-    // Mode STATION[1] or SETUP[3]: Scan for networks;
+  case 5:  // like AUTO, but the AP stays up and the station is retried in background (AP+STA)
+    // Mode STATION[1] or SETUP[3] or AP+retry[5]: Scan for networks;
     disp.rdis->drawString(0, 0, "WiFi Scan...");
     int line = 0;
     WiFi.mode(WIFI_STA);
@@ -3394,7 +3468,7 @@ void loopWifiScan() {
     enableNetwork(true);
     delay(3000);
   }
-  else if(sonde.config.wifi == 3 || abort==1 ) {
+  else if(sonde.config.wifi == 3 || sonde.config.wifi == 5 || abort==1 ) {
     WiFi.disconnect(true);
     delay(1000);
     startAP();
