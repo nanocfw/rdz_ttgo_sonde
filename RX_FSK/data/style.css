@@ -612,18 +612,6 @@ h1{
     color: white;
     background-color: #3a3a3a;
   }
-  .content input[type="text"], .content input[type="password"],
-  .content input[type="number"], .content select, .content textarea,
-  #addForm input[type="text"], #addForm input[type="password"],
-  .system-info input[type="text"], .system-info input[type="password"] {
-    border: 1px solid #666;
-  }
-  .content input:focus, .content select:focus, .content textarea:focus,
-  #addForm input:focus, .system-info input:focus {
-    border-color: #04AA6D;
-    box-shadow: 0 0 0 3px rgba(4,170,109,.30);
-    outline: none;
-  }
   a:link, a:visited {
     color: #D3D3D3;
   }
@@ -745,8 +733,6 @@ h1{
   border: 1px solid #bbb;
   border-radius: 5px;
   font-size: 14px;
-  background-color: #fff;
-  color: #222;
   box-sizing: border-box;
   transition: border-color .15s ease, box-shadow .15s ease;
 }
@@ -756,10 +742,56 @@ h1{
 .content select:focus,
 .content textarea:focus,
 #addForm input:focus,
-.system-info input:focus {
+.system-info input:focus,
+.system-info select:focus {
   outline: none;
   border-color: #04AA6D;
   box-shadow: 0 0 0 3px rgba(4,170,109,.20);
+}
+/* Selects: replace the native control with a custom caret so they match the
+   text inputs (same height/border/radius) and render identically across
+   browsers and in dark mode. */
+.content select,
+.system-info select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23555' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
+  cursor: pointer;
+}
+/* the users "Level" dropdown sits beside the 16em inputs -- match their width */
+#addForm select { width: 16em; max-width: 100%; }
+/* The open option list inherits colors from the styled control, which looks odd;
+   pin clean colors so the dropdown reads well in light mode. */
+.content select option,
+.system-info select option {
+  background-color: #fff;
+  color: #222;
+}
+
+/* Dark-mode field overrides. Placed AFTER the base field rules above so they win
+   the cascade (the @media block earlier in the file would otherwise lose on
+   equal specificity / source order). */
+@media (prefers-color-scheme: dark) {
+  .content input[type="text"], .content input[type="password"],
+  .content input[type="number"], .content select, .content textarea,
+  #addForm input[type="text"], #addForm input[type="password"],
+  .system-info input[type="text"], .system-info input[type="password"] {
+    border-color: #666;
+  }
+  /* lighter caret so the dropdown arrow is visible on the dark field */
+  .content select, .system-info select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ccc' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  }
+  /* dark dropdown option list */
+  .content select option, .system-info select option {
+    background-color: #2b2b2b;
+    color: #fff;
+  }
 }
 /* Checkboxes (e.g. the config "Touch" toggles) adopt the brand colour. */
 .content input[type="checkbox"],
