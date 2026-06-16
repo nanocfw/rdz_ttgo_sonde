@@ -340,13 +340,13 @@ char *aprs_senddata(SondeInfo *si, const char *usercall, const char *objcall, co
 	i=strlen(b);
         i += snprintf(b+i, APRS_MAXLEN-i, "Clb=%.1fm/s ", s->vs );
 	if( !isnan(s->pressure) ) {
-		sprintf(b+strlen(b), "p=%.1fhPa ", s->pressure);
+		snprintf(b+strlen(b), sizeof(b)-strlen(b), "p=%.1fhPa ", s->pressure);
 	}
 	if( !isnan(s->temperature) ) {
-		sprintf(b+strlen(b), "t=%.1fC ", s->temperature);
+		snprintf(b+strlen(b), sizeof(b)-strlen(b), "t=%.1fC ", s->temperature);
 	}
 	if( !isnan(s->relativeHumidity) ) {
-		sprintf(b+strlen(b), "h=%.1f%% ", s->relativeHumidity);
+		snprintf(b+strlen(b), sizeof(b)-strlen(b), "h=%.1f%% ", s->relativeHumidity);
 	}
 	char type[12];
         if ( si->type == STYPE_RS41 && RS41::getSubtype(type, 11, si) == 0 ) {
@@ -355,14 +355,14 @@ char *aprs_senddata(SondeInfo *si, const char *usercall, const char *objcall, co
 	    strncpy(type, sondeTypeStr[sonde.realType(si)], 11);  type[11]=0; 
         }
 	
-	sprintf(b+strlen(b), "%.3fMHz Type=%s ", si->freq, type /* sondeTypeStr[sonde.realType(si)] */ );
+	snprintf(b+strlen(b), sizeof(b)-strlen(b), "%.3fMHz Type=%s ", si->freq, type /* sondeTypeStr[sonde.realType(si)] */ );
 	if( s->countKT != 0xffff && s->vframe - s->crefKT < 51 ) {
-		sprintf(b+strlen(b), "TxOff=%dh%02dm ", s->countKT/3600, (s->countKT-s->countKT/3600*3600)/60);
+		snprintf(b+strlen(b), sizeof(b)-strlen(b), "TxOff=%dh%02dm ", s->countKT/3600, (s->countKT-s->countKT/3600*3600)/60);
 	}
 	if( TYPE_IS_DFM(si->type) || TYPE_IS_METEO(si->type) ) {
-		sprintf(b + strlen(b), "ser=%s ", s->ser);
+		snprintf(b + strlen(b), sizeof(b)-strlen(b), "ser=%s ", s->ser);
 	}
-	sprintf(b + strlen(b), "%s", version_name);
+	snprintf(b + strlen(b), sizeof(b)-strlen(b), "%s", version_name);
 	return b;
 }
 
