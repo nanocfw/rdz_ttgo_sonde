@@ -1208,6 +1208,13 @@ void Display::initFromFile(int index) {
 						colbg = (bg>>19) << 11 | ((bg>>10)&0x3F) << 5 | ((bg>>3)&0x1F);
 					}
 				} else if( (ptr=strchr(s, '=')) ) {  // one line with some data...
+					// countEntries only counts lines starting with a digit; a non-keyword
+					// '=' line not counted there would otherwise advance `what` past the
+					// de[] block (sized entrysize+1). Guard against that overflow.
+					if(what >= entrysize) {
+						LOG_E(TAG, "initFromFile: more entry lines than allocated (%d), ignoring\n", entrysize);
+						continue;
+					}
 					float x,y,w;
 					int n;
 					char text[61];
