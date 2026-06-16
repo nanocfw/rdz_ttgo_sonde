@@ -314,7 +314,7 @@ char *aprs_senddata(SondeInfo *si, const char *usercall, const char *objcall, co
 	// time
 	int i = strlen(b);
 	int sec = s->time % 86400;
-	snprintf(b+i, APRS_MAXLEN-1, "%02d%02d%02dh", sec/(60*60), (sec%(60*60))/60, sec%60);
+	snprintf(b+i, APRS_MAXLEN-i, "%02d%02d%02dh", sec/(60*60), (sec%(60*60))/60, sec%60);
 	i = strlen(b);
 	//aprsstr_append_data(time, ds);
 	int lati = abs((int)s->lat);
