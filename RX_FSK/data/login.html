@@ -7,6 +7,18 @@
     <title>Simple Login Form</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" type="text/css" href="style.css?v=%VERSION_ID%">
+    <style>
+        /* Login button: match the project's green primary buttons. */
+        #loginForm button[type="submit"] {
+            background-color: #04AA6D; color: #fff; border: none; border-radius: 5px;
+            padding: 9px 30px; font-size: 14px; cursor: pointer;
+            transition: background-color .3s ease;
+        }
+        #loginForm button[type="submit"]:hover { background-color: #038f5b; }
+        #loginForm button[type="submit"]:active { transform: translateY(1px); }
+        /* Align the Username/Password labels so their inputs line up. */
+        #loginForm label { display: inline-block; min-width: 6em; }
+    </style>
     <script>
         // If loaded inside a tab iframe (e.g. after an auth redirect), take over the full window
         if (window.top !== window.self) { window.top.location.href = "/login.html"; }
@@ -50,6 +62,7 @@
 <body>
 <div class="wrapper">
  <div class="header"><div id="myTopnav" class="topnav">
+  <a href="/index.html" class="tablinks">Home</a>
   <a id="defaultTab" class="tablinks active">Login</a>
  </div></div>
  <div id="Login" class="tabcontent" style="display: flex;">
