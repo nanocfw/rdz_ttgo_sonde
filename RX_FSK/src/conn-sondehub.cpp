@@ -880,6 +880,11 @@ String ConnSondehub::getStatus() {
         escapeJson(info+n, _rs_ack.buf, 1200-n);
         n = strlen(info);
         int k = snprintf(info+n, 1200-n, "<br>Import reply: ");
+        // snprintf returns the length it WOULD have written; clamp to the
+        // space actually left so info+n+k stays in bounds and the size below
+        // cannot go negative.
+        if(k < 0) k = 0;
+        if(k > 1200-n-1) k = 1200-n-1;
         if(strncmp(_rs_import.buf, "HTTP/1.1 200", 12)==0) {
             /* if ok only show beginning. if error show more */
             strcpy(_rs_import.buf+27, "...");
