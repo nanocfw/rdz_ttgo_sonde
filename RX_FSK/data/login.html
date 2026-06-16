@@ -18,11 +18,22 @@
             const username = document.getElementById('user').value;
             const password = document.getElementById('pass').value;
             const preauth = document.getElementById('preauth').value;
-            const hashInput = `${username}:${preauth}:${password}`;
-            const hash = sha256(hashInput);
-            document.getElementById('auth').value = hash;
+            const auth = sha256(`${username}:${preauth}:${password}`);
             document.getElementById('pass').value = '';
-            document.getElementById('loginForm').submit();
+            // Submit via fetch so we can surface login errors in an alert instead of
+            // navigating away to a bare text response. On success the server replies with a
+            // redirect (+Set-Cookie), which fetch follows; we then load the home page.
+            const body = new URLSearchParams({ user: username, preauth: preauth, auth: auth });
+            fetch('/login.html', { method: 'POST', body: body, credentials: 'same-origin' })
+                .then(resp => {
+                    if (resp.ok) { window.location.href = '/index.html'; return; }
+                    // The preauth nonce is single-use/short-lived, so reload to get a fresh one.
+                    return resp.text().then(msg => {
+                        alert(msg || 'Login failed');
+                        window.location.reload();
+                    });
+                })
+                .catch(() => { alert('Login failed (network error)'); });
         }
     </script>
 </head>
