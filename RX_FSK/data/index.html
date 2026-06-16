@@ -151,7 +151,13 @@ function myFunction() {
     x.className = "topnav";
   }
 }
-document.getElementById("defaultTab").click();
+// Restore the tab named in the URL hash on reload (e.g. #users), else default to Home.
+// Skip #livemap: that link navigates to a separate page rather than switching tabs.
+var initHash = location.hash;
+var initTab = (initHash && initHash !== "#livemap")
+	? document.querySelector('.tablinks[href="' + initHash + '"]')
+	: null;
+(initTab || document.getElementById("defaultTab")).click();
 
 const bootID = "%BOOTID%";
 const prevID = localStorage.getItem("bootID");
