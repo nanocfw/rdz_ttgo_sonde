@@ -14,10 +14,10 @@
 	<a href="#qrg" onclick="selTab(event,'QRG')" class="tablinks">QRG</a>
 	<a href="#data" onclick="selTab(event,'Data')" class="tablinks">Data</a>
 	<a href="#livemap" onclick="document.location.href='livemap.html'" class="tablinks">Livemap</a>
-	<a href="#ctrl" onclick="selTab(event,'Control')" class="tablinks">Control</a>
-	<a href="#config" onclick="selTab(event,'Config')" class="tablinks">Config</a>
-	<a href="#wifi" onclick="selTab(event,'WiFi')" class="tablinks">WiFi</a>
-	<a href="#users" onclick="selTab(event,'Users')" class="tablinks">Users</a>
+	<a href="#ctrl" onclick="selTab(event,'Control')" class="tablinks" data-minlevel="2">Control</a>
+	<a href="#config" onclick="selTab(event,'Config')" class="tablinks" data-minlevel="2">Config</a>
+	<a href="#wifi" onclick="selTab(event,'WiFi')" class="tablinks" data-minlevel="2">WiFi</a>
+	<a href="#users" onclick="selTab(event,'Users')" class="tablinks" data-minlevel="2">Users</a>
 	<a href="javascript:void(0);" class="icon" onclick="myFunction()">
 		<span class="hamburger"></span>
 	</a>
@@ -151,13 +151,26 @@ function myFunction() {
     x.className = "topnav";
   }
 }
-// Restore the tab named in the URL hash on reload (e.g. #users), else default to Home.
+// Hide nav tabs the current user cannot access (mirrors the server-side auth checks), then
+// restore the tab named in the URL hash on reload (e.g. #users), else default to Home.
 // Skip #livemap: that link navigates to a separate page rather than switching tabs.
-var initHash = location.hash;
-var initTab = (initHash && initHash !== "#livemap")
-	? document.querySelector('.tablinks[href="' + initHash + '"]')
-	: null;
-(initTab || document.getElementById("defaultTab")).click();
+function applyAccess(level) {
+	var links = document.getElementsByClassName("tablinks");
+	for(var i=0; i<links.length; i++) {
+		var need = parseInt(links[i].dataset.minlevel || "0", 10);
+		links[i].style.display = (need > level) ? "none" : "";
+	}
+	var hash = location.hash;
+	var tab = (hash && hash !== "#livemap")
+		? document.querySelector('.tablinks[href="' + hash + '"]')
+		: null;
+	if(tab && tab.style.display === "none") tab = null;  // requested tab is not accessible
+	(tab || document.getElementById("defaultTab")).click();
+}
+fetch('/whoami.json')
+	.then(response => response.json())
+	.then(data => applyAccess(typeof data.level === "number" ? data.level : 2))
+	.catch(() => applyAccess(2));  // on error show all tabs; the firmware still enforces access
 
 const bootID = "%BOOTID%";
 const prevID = localStorage.getItem("bootID");

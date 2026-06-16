@@ -49,6 +49,9 @@ RX_FSK.ino) and has no static file. It can only be viewed on real hardware.</em>
 </div></div></body></html>"""
 
 MOCK_JSON = {
+    # Effective access level of the "logged-in" preview user. Change level to 1 (or 0)
+    # to preview how the nav hides the admin-only tabs (Control/Config/WiFi/Users).
+    "/whoami.json": {"user": "admin", "level": 2},
     "/users.json": [
         {"user": "admin", "level": 2},
         {"user": "guest", "level": 1},

@@ -1589,6 +1589,27 @@ void SetupAsyncServer() {
     if(!isUserMgmtAllowed(request)) return;
     handleUsersPost(request);
   });
+  // Effective access level for the current request (max of the open default level and the
+  // session level -- same rule as isAuthenticated). Used by index.html to hide nav tabs the
+  // user cannot access. Purely cosmetic: every route still enforces auth server-side.
+  server.on("/whoami.json", HTTP_GET, [](AsyncWebServerRequest * request) {
+    char session[COOKIE_SIZE];
+    getSessionCookie(request, session, COOKIE_SIZE);
+    int level = defaultUserLevel;
+    if(session[0]) {
+      int slvl = getCookieAuthLevel(session);
+      if(slvl > level) level = slvl;
+    }
+    char user[USERLEN+1] = "";
+    if(session[0]) {
+      int i = 0;
+      for(; i < USERLEN && session[i] && session[i] != ':'; i++) user[i] = session[i];
+      user[i] = 0;
+    }
+    char buf[64];
+    snprintf(buf, sizeof(buf), "{\"user\":\"%s\",\"level\":%d}", user, level);
+    request->send(200, "application/json", buf);
+  });
 
   server.on("/file", HTTP_GET,  [](AsyncWebServerRequest * request) {
     if(!isAuthenticated(request, 2)) return;
