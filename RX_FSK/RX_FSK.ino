@@ -193,6 +193,18 @@ bool isSensitiveFile(const char *url) {
     return false;
 }
 
+// Web assets (stylesheets, scripts, page templates, map/track overlays, images, fonts) that are
+// safe to serve to unauthenticated clients -- the public Home/Data/Livemap/login pages need them.
+// Anything else reaching the static fallback (notably the *.txt config/data files and GPSRESET)
+// is treated as private and requires a logged-in session.
+bool isPublicStaticAsset(const String &url) {
+    return url.endsWith(".css")  || url.endsWith(".js")   || url.endsWith(".html") ||
+           url.endsWith(".htm")  || url.endsWith(".gpx")  || url.endsWith(".kml")  ||
+           url.endsWith(".ico")  || url.endsWith(".png")  || url.endsWith(".jpg")  ||
+           url.endsWith(".jpeg") || url.endsWith(".gif")  || url.endsWith(".svg")  ||
+           url.endsWith(".woff") || url.endsWith(".woff2")|| url.endsWith(".ttf");
+}
+
 
 // Read line from file, independent of line termination (LF or CR LF)
 String readLine(Stream &stream) {
@@ -378,9 +390,14 @@ void HTMLBODY(char *ptr, const char *which) { HTMLBODY_OS(ptr, which, NULL); }
 void HTMLBODYEND(char *ptr) {
   strcat(ptr, "</div></form></body></html>");
 }
-void HTMLSAVEBUTTON(char *ptr) {
-  strcat(ptr, "</div><div class=\"footer\"><input type=\"submit\" class=\"save\" value=\"Save changes\"/>"
-         "<span class=\"ttgoinfo\">rdzTTGOserver ");
+// Render the form footer. The "Save changes" submit button is emitted only for level-2
+// (admin) viewers; level-1 users may view these forms but cannot save, so hiding the button
+// matches the server-side POST guard (which still enforces it regardless).
+void HTMLSAVEBUTTON(char *ptr, int level) {
+  strcat(ptr, "</div><div class=\"footer\">");
+  if(level >= 2)
+    strcat(ptr, "<input type=\"submit\" class=\"save\" value=\"Save changes\"/>");
+  strcat(ptr, "<span class=\"ttgoinfo\">rdzTTGOserver ");
   strcat(ptr, version_id);
   strcat(ptr, "</span>");
 }
@@ -492,7 +509,12 @@ void handleUsersPost(AsyncWebServerRequest * request) {
     request->send(400, "text/plain", "unknown action");
     return;
   }
-  if(res == 0) request->send(200, "text/plain", "ok");
+  if(res == 0) {
+    // Creating the first user flips the unauthenticated default level (,2, -> ,0,) in user.txt.
+    // Re-read it so the lockdown takes effect immediately, without waiting for a reboot.
+    defaultUserLevel = getDefaultAuthLevel();
+    request->send(200, "text/plain", "ok");
+  }
   else if(res == -2) request->send(409, "text/plain", "cannot remove or demote the last administrator");
   else request->send(400, "text/plain", "error");
 }
@@ -513,7 +535,7 @@ const char *getQRGAsJson() {
   return message;
 }
 
-const char *createQRGForm() {
+const char *createQRGForm(int level) {
   char *ptr = message;
   strcpy(ptr, HTMLHEAD);
   strcat(ptr, "<script src=\"rdz.js\"></script></head>");
@@ -528,7 +550,7 @@ const char *createQRGForm() {
   strcat(ptr, "<div id=\"divTable\"></div>");
   strcat(ptr, "<script> qrgTable() </script>\n");
   //</div><div class=\"footer\"><input type=\"submit\" class=\"update\" value=\"Update\"/>");
-  HTMLSAVEBUTTON(ptr);
+  HTMLSAVEBUTTON(ptr, level);
   HTMLBODYEND(ptr);
   LOG_D(TAG, "QRG form: size=%d bytes\n", strlen(message));
   return message;
@@ -669,7 +691,7 @@ const char *createWIFIForm() {
   }
   strcat(ptr, "</table><script>footer()</script>");
   //</div><div class=\"footer\"><input type=\"submit\" class=\"update\" value=\"Update\"/>");
-  HTMLSAVEBUTTON(ptr);
+  HTMLSAVEBUTTON(ptr, 2);   // WiFi is level-2 only, so the viewer is always an admin
   HTMLBODYEND(ptr);
   LOG_D(TAG, "WIFI form: size=%d bytes\n", strlen(message));
   return message;
@@ -947,7 +969,7 @@ struct st_configitems config_list[] = {
 
 const int N_CONFIG = (sizeof(config_list) / sizeof(struct st_configitems));
 
-const char *createConfigForm() {
+const char *createConfigForm(int level) {
   char *ptr = message;
   strcpy(ptr, HTMLHEAD);
   strcat(ptr, "<script src=\"rdz.js\"></script></head>");
@@ -996,7 +1018,7 @@ const char *createConfigForm() {
   }
   strcat(ptr, "configTable();\n </script>");
   strcat(ptr, "<script>footer()</script>");
-  HTMLSAVEBUTTON(ptr);
+  HTMLSAVEBUTTON(ptr, level);
   HTMLBODYEND(ptr);
   LOG_D(TAG, "Config form: size=%d bytes\n", strlen(message));
   return message;
@@ -1460,6 +1482,19 @@ bool isAuthenticated(AsyncWebServerRequest *request, int level) {
   return false;
 }
 
+// Effective access level for a request: the larger of the open default level and the
+// session level (same rule isAuthenticated/whoami use). Used to render UI per access level.
+int reqAuthLevel(AsyncWebServerRequest *request) {
+  int level = defaultUserLevel;
+  char session[COOKIE_SIZE];
+  getSessionCookie(request, session, COOKIE_SIZE);
+  if(session[0]) {
+    int slvl = getCookieAuthLevel(session);
+    if(slvl > level) level = slvl;
+  }
+  return level;
+}
+
 const char* PARAM_MESSAGE = "message";
 
 #if FEATURE_SDCARD
@@ -1501,17 +1536,19 @@ void SetupAsyncServer() {
   });
 
   server.on("/qrg.json", HTTP_GET,  [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 1)) return;
     request->send(200, "text/html", getQRGAsJson());
   });
 
   server.on("/qrg.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
-    request->send(200, "text/html", createQRGForm());
+    if(!isAuthenticated(request, 1)) return;
+    request->send(200, "text/html", createQRGForm(reqAuthLevel(request)));
   });
- 
+
   server.on("/qrg.html", HTTP_POST, [](AsyncWebServerRequest * request) {
     if(!isAuthenticated(request, 2)) return;
     handleQRGPost(request);
-    request->send(200, "text/html", createQRGForm());
+    request->send(200, "text/html", createQRGForm(2));
   });
 
   server.on("/wifi.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
@@ -1526,14 +1563,14 @@ void SetupAsyncServer() {
   });
 
   server.on("/config.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
-    if(!isAuthenticated(request, 2)) return;
-    request->send(200, "text/html", createConfigForm());
+    if(!isAuthenticated(request, 1)) return;   // level 1 may view config; saving (POST) needs level 2
+    request->send(200, "text/html", createConfigForm(reqAuthLevel(request)));
   });
-  
+
   server.on("/config.html", HTTP_POST, [](AsyncWebServerRequest * request) {
     if(!isAuthenticated(request, 2)) return;
     handleConfigPost(request);
-    request->send(200, "text/html", createConfigForm());
+    request->send(200, "text/html", createConfigForm(2));
   });
 
   server.on("/status.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
@@ -1549,6 +1586,7 @@ void SetupAsyncServer() {
     request->send(LittleFS, "/livemap.js", String(), false, processor);
   });
   server.on("/update.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;   // firmware update is an admin action
     request->send(200, "text/html", createUpdateForm(0));
   });
   server.on("/update.html", HTTP_POST, [](AsyncWebServerRequest * request) {
@@ -1558,11 +1596,11 @@ void SetupAsyncServer() {
   });
 
   server.on("/control.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
-    if(!isAuthenticated(request, 2)) return;
+    if(!isAuthenticated(request, 1)) return;   // level 1 may view and use the control tab
     request->send(200, "text/html", createControlForm());
   });
   server.on("/control.html", HTTP_POST, [](AsyncWebServerRequest * request) {
-    if(!isAuthenticated(request, 2)) return;
+    if(!isAuthenticated(request, 1)) return;   // control actions (rx/scan/spectrum/...) allowed at level 1
     handleControlPost(request);
     request->send(200, "text/html", createControlForm());
   });
@@ -1823,6 +1861,7 @@ void SetupAsyncServer() {
   });
 
   server.on("/upd.html", HTTP_GET, [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;   // update check/trigger page is admin-only
     request->send(LittleFS, "/upd.html", String(), false, processor);
   });
 
@@ -1848,6 +1887,12 @@ void SetupAsyncServer() {
       // would otherwise expose user.txt / networks.txt / config.txt by direct URL).
       if (isSensitiveFile(url.c_str())) {
         if(!isAuthenticated(request, 2)) return;
+      }
+      // Any other non-asset file (config/data such as qrg.txt, screens*.txt, gpsinit.txt,
+      // GPSRESET) is private: require at least a logged-in (level 1) session before serving
+      // it by direct URL. Public web assets (css/js/html/images/...) stay open.
+      else if (!isPublicStaticAsset(url)) {
+        if(!isAuthenticated(request, 1)) return;
       }
       if (url.endsWith(".gpx"))
         request->send(200, "application/gpx+xml", sendGPX(request));

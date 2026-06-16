@@ -236,7 +236,9 @@ int getDefaultAuthLevel() {
   char line[128];
   int level = 2;
   const char *ptr = getUser("", line, 128, &level);
-  if(!ptr) return 2;   // no default-user line => unauthenticated access allowed (unchanged behavior)
+  // No explicit default line: lock anonymous access out (level 0) once any account exists,
+  // otherwise keep it open (level 2) so a fresh/empty device can still be set up.
+  if(!ptr) return hasNamedUsers() ? 0 : 2;
   return level;
 }
 
@@ -324,7 +326,8 @@ int setUser(const char *user, int level, const char *password) {
   if(!user || user[0] == 0 || !password) return -1;   // empty username = default entry, not managed here
   if(level < 1 || level > 2) return -1;
   // The first account must be an administrator, otherwise nobody could ever manage users again.
-  if(!hasNamedUsers()) level = 2;
+  bool firstUser = !hasNamedUsers();
+  if(firstUser) level = 2;
   // Don't allow demoting the last administrator (would lock out user management).
   if(level < 2 && currentUserLevel(user) >= 2 && countAdmins() <= 1) return -2;
   // The flat file is comma-separated and line-based: reject anything that would corrupt it.
@@ -333,7 +336,12 @@ int setUser(const char *user, int level, const char *password) {
   if(strlen(user) + strlen(password) + 8 >= MAX_USER_LINE) return -1;
   char newline[MAX_USER_LINE];
   snprintf(newline, MAX_USER_LINE, "%s,%d,%s", user, level, password);
-  return rewriteUserFile(user, newline) < 0 ? -1 : 0;
+  if(rewriteUserFile(user, newline) < 0) return -1;
+  // As soon as the first real account exists, close the wide-open default: set the
+  // empty-username default line to level 0 so unauthenticated clients lose config access.
+  // (Before this, a fresh device ships ",2," so initial setup is possible without login.)
+  if(firstUser) rewriteUserFile("", ",0,");
+  return 0;
 }
 
 // Delete a named user.
