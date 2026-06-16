@@ -1276,6 +1276,7 @@ int streamEditForm(int &state, File & file, String filename, char *buffer, size_
       while (file.available()) {
         int cnt = readLine(file, buffer + i, maxlen - i - 1);
         i += cnt;
+        if (i + 2 > maxlen) break; // no room for '\n'+NUL; readLine already terminated buffer
         buffer[i++] = '\n';
         buffer[i] = 0;
         if (i + 256 > maxlen) break; // max line length in file 256 chars
