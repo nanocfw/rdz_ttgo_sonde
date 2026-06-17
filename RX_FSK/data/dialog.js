@@ -106,24 +106,29 @@
   global.waitForRebootAndReload = function (fromId, title, body) {
     body = body || 'The device is restarting.';
     fromId = (fromId || '').trim();
-    var dlg = showProgress(body, title || 'Please wait');
+    // Static message (no elapsed counter): while the device is down the /bootid probe
+    // can't advance a countdown anyway, so just say it reloads when the device is back.
+    var dlg = showProgress(body + '\n\nThis page reloads automatically once the device is back online.',
+                           title || 'Please wait');
     var start = Date.now(), MAX_MS = 5 * 60 * 1000, GRACE_MS = 4000, sawDown = false;
     function reload() { (window.top || window).location.reload(); }
     function poll() {
-      if (Date.now() - start > MAX_MS) { dlg.update('Taking longer than expected — reloading…'); reload(); return; }
-      var el = Math.round((Date.now() - start) / 1000);
-      dlg.update(body + '\n\nWaiting for the device to reboot… (' + el + ' s)');
-      fetch('/bootid', { cache: 'no-store' })
+      if (Date.now() - start > MAX_MS) { reload(); return; }
+      // Bound each probe so a hung connection (device mid-reboot) doesn't stall polling.
+      var ctl = new AbortController();
+      var timer = setTimeout(function () { ctl.abort(); }, 2500);
+      fetch('/bootid', { cache: 'no-store', signal: ctl.signal })
         .then(function (r) { return r.ok ? r.text() : Promise.reject(); })
         .then(function (id) {
+          clearTimeout(timer);
           id = (id || '').trim();
           // With a known baseline, the bootid changing means it rebooted. Without one
           // (capture failed), wait until we've seen it go down and come back instead.
           var back = fromId ? (id && id !== fromId) : (sawDown && id);
-          if (back) { dlg.setTitle('Done'); dlg.update('Device is back online — reloading…'); setTimeout(reload, 800); }
-          else setTimeout(poll, 3000);
+          if (back) { dlg.setTitle('Done'); dlg.update('Device is back online — reloading…'); setTimeout(reload, 600); }
+          else setTimeout(poll, 2000);
         })
-        .catch(function () { sawDown = true; setTimeout(poll, 3000); });   // device down mid-reboot
+        .catch(function () { clearTimeout(timer); sawDown = true; setTimeout(poll, 2000); });   // down/abort -> retry
     }
     setTimeout(poll, GRACE_MS);
     return dlg;
