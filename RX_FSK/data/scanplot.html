@@ -5,15 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>rdzSonde Scan Plot</title>
 <style>
-  body { font-family: sans-serif; margin: 0; background:#000; color:#eee; }
-  .bar { padding: 8px 12px; background:#1a1a1a; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  html, body { height:100%; }
+  body { font-family: sans-serif; margin: 0; background:#000; color:#eee;
+         display:flex; flex-direction:column; }
+  .bar { padding: 8px 12px; background:#1a1a1a; display:flex; gap:16px; align-items:center; flex-wrap:wrap; flex:none; }
   .bar a { color:#6cf; text-decoration:none; }
-  #banner { padding:6px 12px; background:#553; color:#ffd; display:none; }
-  #head { padding:6px 12px 0; }
+  #banner { padding:6px 12px; background:#553; color:#ffd; display:none; flex:none; }
+  #head { padding:6px 12px 0; flex:none; }
   #head h2 { margin:0; font-size:1.05em; }
   #stamp { font-size:0.9em; color:#bbb; }
-  #wrap { padding:4px 12px 12px; }
-  canvas { width:100%; background:#000; display:block; }
+  #wrap { padding:4px 12px 12px; flex:1 1 auto; min-height:0; }
+  canvas { width:100%; height:100%; background:#000; display:block; }
   .muted { color:#999; font-size:0.85em; }
 </style>
 </head>
@@ -53,8 +55,14 @@ function draw() {
   if (!j || !j.data || j.n < 2) return;
   let n = j.n, data = j.data, start = j.startfreq, step = j.step;
 
-  // logical canvas size (CSS scales width to 100%)
-  let W = cv.width, H = cv.height;
+  // match the backing store to the on-screen size so the trace is
+  // rendered at native resolution instead of being scaled (zoomed/blurred)
+  let dpr = window.devicePixelRatio || 1;
+  let W = Math.round(cv.clientWidth), H = Math.round(cv.clientHeight);
+  if (cv.width !== W * dpr || cv.height !== H * dpr) {
+    cv.width = W * dpr; cv.height = H * dpr;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // draw in CSS pixels
   const ML = 48, MR = 12, MT = 12, MB = 24;        // margins
   let pw = W - ML - MR, ph = H - MT - MB;
 
