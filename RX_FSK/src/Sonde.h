@@ -311,6 +311,7 @@ typedef struct st_rdzconfig {
 	int norx_timeout;		// Time after which rx mode switches to scan mode (without rx signal)
 	int noisefloor;			// for spectrum display
 	int scanplotint;		// web scan-plot idle-sweep interval in seconds (0=disable)
+	int allowfileupload;		// allow firmware/filesystem upload from the update page (0=disable). Hidden: not in cfg.js
 	char mdnsname[15];		// mDNS-Name, defaults to rdzsonde
 	// receiver configuration
 	int freqofs;			// frequency offset (tuner config = rx frequency + freqofs) in Hz

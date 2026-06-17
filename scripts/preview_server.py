@@ -25,6 +25,7 @@ PLACEHOLDERS = {
     "%VERSION_NAME%": "rdzTTGOSonde",
     "%VERSION_ID%": "devel20260615",
     "%FULLNAMEID%": "teste20260616-C3",
+    "%ALLOWFILEUPLOAD%": "1",   # show the Update-from-file section in preview
     "%AUTODETECT_INFO%": "TTGO LoRa32 v2.1 (auto-detected)",
     "%LOCAL_UPDATES%": "",
     "%MAPCENTER%": "48.0,11.0,10",
@@ -258,6 +259,14 @@ def make_handler(root):
 
         def do_POST(self):
             path = self.path.split("?")[0]
+            # Drain the request body so uploads (multipart firmware/fs images) complete
+            # cleanly and the client's upload-progress reaches 100%.
+            remaining = int(self.headers.get("Content-Length", 0) or 0)
+            while remaining > 0:
+                chunk = self.rfile.read(min(remaining, 65536))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
             # These POSTs reboot the device (OTA, file-upload OTA, or an explicit reboot
             # after a config/qrg restore); record it so /bootid can simulate the device
             # coming back with a new bootid a few seconds later.

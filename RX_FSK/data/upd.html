@@ -14,7 +14,7 @@
     .upd-section { margin: 22px auto; max-width: 640px; }
     .upd-section h2 { font-size: 18px; margin: 0 0 8px; }
     .upd-note { color: #777; font-size: 13px; line-height: 1.5; }
-    .upd-url { padding: 6px 8px; box-sizing: border-box; max-width: 100%; }
+    .upd-url { padding: 6px 8px; box-sizing: border-box; max-width: 30em; }
     /* Per-branch update status shown under the version in its table row. */
     .upd-status { display: block; font-size: 13px; margin-top: 3px; }
     .upd-ok   { color: #04AA6D; }
@@ -28,6 +28,21 @@
     .updbtn:hover { background-color: #038f5b; }
     .updbtn:active { transform: translateY(1px); }
     .updbtn:disabled { background-color: #9bbfae; cursor: not-allowed; }
+    /* Update-from-file: styled rows with a custom file button (the native control is
+       unstyled and locale-dependent). */
+    .filerow { display: flex; align-items: center; justify-content: space-between;
+               gap: 14px; padding: 12px 2px; border-bottom: 1px solid #e3e3e3; }
+    .filerow:first-of-type { border-top: 1px solid #e3e3e3; }
+    .fileinfo { display: flex; flex-direction: column; line-height: 1.35; }
+    .upd-hint { color: #999; font-size: 12px; }
+    .filepick { display: flex; align-items: center; gap: 10px; cursor: pointer; min-width: 0; }
+    .filebtn { background: #f0f0f0; border: 1px solid #c9c9c9; border-radius: 5px;
+               padding: 6px 14px; font-size: 13px; color: #333; white-space: nowrap; }
+    .filepick:hover .filebtn { background: #e6e6e6; }
+    .filename { font-size: 13px; color: #999; overflow-wrap: anywhere; }
+    .filepick.has-file .filename { color: #333; }
+    .filepick.bad-name .filename { color: #c47f00; }   /* name differs from the expected one */
+    .updbtn[type="submit"] { margin-top: 14px; }
   </style>
 </head>
 <body>
@@ -72,6 +87,31 @@
         <input class="upd-url" type="text" name="url" value="%LOCAL_UPDATES%" size="48">
       </form>
 
+      <!-- Update from local files (hidden unless allowfileupload is enabled in config).
+           Select the firmware and/or filesystem image; one button uploads all chosen.
+           The firmware auto-detects each file by content, so the slot is just a hint. -->
+      <form class="upd-section" id="file-update-section" action="/uploadota" method="post"
+            enctype="multipart/form-data">
+        <h2>Update from file</h2>
+        <p class="upd-note">Upload a firmware and/or filesystem image built locally
+          (<tt>make ota</tt>). Choose either or both, then apply.</p>
+        <div class="filerow">
+          <div class="fileinfo"><b>Firmware (app)</b><span class="upd-hint">expects update.ino.bin</span></div>
+          <label class="filepick">
+            <input type="file" name="firmware" accept=".bin" data-expect="update.ino.bin" hidden>
+            <span class="filebtn">Choose file</span><span class="filename">No file chosen</span>
+          </label>
+        </div>
+        <div class="filerow">
+          <div class="fileinfo"><b>Filesystem (web UI)</b><span class="upd-hint">expects update.fs.bin</span></div>
+          <label class="filepick">
+            <input type="file" name="filesystem" accept=".bin" data-expect="update.fs.bin" hidden>
+            <span class="filebtn">Choose file</span><span class="filename">No file chosen</span>
+          </label>
+        </div>
+        <input class="updbtn" type="submit" value="Upload &amp; apply">
+      </form>
+
       <div class="upd-section">
         <p class="upd-note">
           If the version suffix <b>letter</b> differs, a full re-flash over USB is
@@ -87,8 +127,13 @@
 
 <script>
 const localEnabled = "%LOCAL_UPDATES%";
+const fileUploadEnabled = "%ALLOWFILEUPLOAD%";   // "1" enables the Update-from-file section
 const installed = "%FULLNAMEID%".trim();   // e.g. teste20260616-C3
 const initialBootID = "%BOOTID%";          // changes when the device reboots after updating
+// PCT holds the percent sign, built at runtime so no literal percent character appears
+// in this file. It is served through the firmware token template engine, which would
+// mis-parse a stray percent as a token delimiter and corrupt the script.
+const PCT = String.fromCharCode(37);
 
 document.addEventListener("DOMContentLoaded", () => {
   // The local-update-from-URL section is a developer feature; hide it unless a
@@ -187,6 +232,66 @@ document.querySelectorAll('form[action="update.html"]').forEach(form => {
       .then(ok => { if (ok) startServerUpdate(form, sub); });
   });
 });
+
+// Update-from-file: upload the selected firmware/filesystem image(s) to /uploadota with
+// an upload progress bar, then wait for the reboot and reload. Hidden unless enabled.
+function startFileUpload(form) {
+  const fd = new FormData();
+  let n = 0;
+  form.querySelectorAll("input[type=file]").forEach(inp => {
+    if (inp.files && inp.files.length) { fd.append(inp.name, inp.files[0]); n++; }
+  });
+  if (n === 0) { showAlert("Please choose at least one file to upload."); return; }
+  showConfirm("Upload " + n + " file(s) and apply?\nThe device will reboot afterwards.")
+    .then(ok => {
+      if (!ok) return;
+      const dlg = showProgress("Uploading… 0" + PCT, "Updating");
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", form.action);
+      xhr.upload.onprogress = e => {
+        if (e.lengthComputable) dlg.update("Uploading… " + Math.round(e.loaded / e.total * 100) + PCT);
+      };
+      xhr.onload = () => {
+        if (xhr.status === 200) {
+          waitForRebootAndReload(initialBootID, "Updating",
+            "The uploaded image is being applied, then the device will reboot. Do not power it off.");
+        } else {
+          dlg.close();
+          showAlert("Upload failed: " + (xhr.responseText || ("HTTP " + xhr.status)));
+        }
+      };
+      xhr.onerror = () => { dlg.close(); showAlert("Upload failed (network error)."); };
+      xhr.send(fd);
+    });
+}
+
+// Reflect the chosen file's name in the styled picker. accept="" only filters by
+// extension, so flag (amber) a name that differs from the expected one — but still
+// allow it, since the firmware detects firmware-vs-filesystem by content anyway.
+function refreshPick(inp) {
+  const pick = inp.closest(".filepick");
+  const fnEl = pick.querySelector(".filename");
+  if (inp.files && inp.files.length) {
+    const nm = inp.files[0].name, expect = inp.getAttribute("data-expect");
+    fnEl.textContent = nm;
+    pick.classList.add("has-file");
+    pick.classList.toggle("bad-name", !!expect && nm !== expect);
+  } else {
+    fnEl.textContent = "No file chosen";
+    pick.classList.remove("has-file", "bad-name");
+  }
+}
+
+const fileForm = document.getElementById("file-update-section");
+if (fileForm) {
+  if (fileUploadEnabled === "0" || fileUploadEnabled.trim() === "") {
+    fileForm.style.display = "none";
+  } else {
+    fileForm.querySelectorAll("input[type=file]").forEach(inp =>
+      inp.addEventListener("change", () => refreshPick(inp)));
+    fileForm.addEventListener("submit", e => { e.preventDefault(); startFileUpload(e.target); });
+  }
+}
 </script>
 </body>
 </html>

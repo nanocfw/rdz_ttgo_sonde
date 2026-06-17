@@ -292,6 +292,9 @@ String processor(const String& var) {
     if(localUpdates) return String(localUpdates);
     else return String();
   }
+  if (var == "ALLOWFILEUPLOAD") {
+    return String(sonde.config.allowfileupload);
+  }
   if (var == "PREAUTH") {
     char preauth[COOKIE_SIZE];
     generateRandomCookie("preauth",preauth);
@@ -948,6 +951,7 @@ struct st_configitems config_list[] = {
   {"marker", 0, &sonde.config.marker},
   {"noisefloor", 0, &sonde.config.noisefloor},
   {"scanplotint", 0, &sonde.config.scanplotint},
+  {"allowfileupload", 0, &sonde.config.allowfileupload},
   /* decoder settings */
   {"freqofs", 0, &sonde.config.freqofs},
   {"lnaboost", 0, &sonde.config.lnaboost},
@@ -1159,6 +1163,11 @@ const char *handleConfigPost(AsyncWebServerRequest * request) {
     //int wlen = f.printf("%s=%s\n", config_list[idx].name, strvalue.c_str());
     int wlen = f.printf("%s=%s\n", label, strvalue.c_str());
     LOG_D(TAG, "Written bytes: %d\n", wlen);
+  }
+  // allowfileupload is a hidden option (not rendered in cfg.js), so it is never part of
+  // the submitted form. Re-emit it when enabled so saving the config form does not wipe it.
+  if (sonde.config.allowfileupload) {
+    f.printf("allowfileupload=%d\n", sonde.config.allowfileupload);
   }
   LOG_D(TAG, "Flushing file\n");
   f.flush();
@@ -1615,6 +1624,82 @@ static bool deleteSdDirRecursive(const char *sdPath, const char *vfsPath) {
 }
 #endif
 
+// Unpack a filesystem-update archive (the format produced by scripts/makefsupdate.py)
+// from a stream into LittleFS. The archive repeats a "<filename> <size>\n" header line
+// followed by <size> raw bytes; each entry is written to /<filename>. Works on any
+// Stream -- the pull OTA passes the WiFiClient, the web upload passes a buffered File.
+// Returns the number of files written, or -1 on a malformed header.
+int unpackFsArchive(Stream &in) {
+  int count = 0;
+  while (in.available()) {
+    char fn[128];
+    fn[0] = '/';
+    size_t fnlen = in.readBytesUntil('\n', fn + 1, sizeof(fn) - 2);
+    fn[1 + fnlen] = 0;   // readBytesUntil does not terminate; also keeps the write in bounds
+    char *sz = strchr(fn, ' ');
+    if (!sz) return -1;
+    *sz = 0;
+    int len = atoi(sz + 1);
+    LOG_I(TAG, "Updating file %s (%d bytes)\n", fn, len);
+    File f = LittleFS.open(fn, FILE_WRITE);
+    while (len > 0) {
+      unsigned char buf[1024];
+      size_t r = in.readBytes((char *)buf, len > 1024 ? 1024 : len);
+      if (r == 0) break;   // timeout / end of stream -- stop this entry
+      if (f) f.write(buf, r);
+      len -= r;
+    }
+    if (f) f.close();
+    count++;
+  }
+  return count;
+}
+
+// --- Web file-upload OTA (POST /uploadota) -------------------------------------------
+// Deferred reboot: a millis() deadline set by the upload completion handler; loop()
+// restarts once it passes, so the HTTP response is delivered before the reboot.
+unsigned long otaRebootAt = 0;
+// State for the single in-flight /uploadota request. A request may carry the firmware
+// bin and/or the filesystem archive; each file part is routed by its leading byte.
+static bool otaUpInProgress = false, otaUpErr = false, otaUpFw = false, otaUpFs = false;
+static int  otaUpTarget = 0;          // current part: 1=firmware (U_FLASH), 2=filesystem temp file
+static File otaUpFsFile;
+#define OTA_FS_TMP "/_otafs.bin"
+
+// Per-chunk upload callback. ESP32 app images begin with 0xE9; anything else is treated
+// as a filesystem archive (buffered to a temp file, unpacked in the completion handler).
+void handleOtaUpload(AsyncWebServerRequest *request, const String &filename, size_t index,
+                     uint8_t *data, size_t len, bool final) {
+  if (index == 0 && !otaUpInProgress) {   // first part of the request -> reset state
+    otaUpInProgress = true; otaUpErr = false; otaUpFw = false; otaUpFs = false;
+  }
+  if (index == 0) {
+    // Silent auth + feature gate (must not write firmware for unauthorized requests).
+    if (reqAuthLevel(request) < 2 || !sonde.config.allowfileupload) { otaUpErr = true; otaUpTarget = 0; return; }
+    if (len > 0 && data[0] == 0xE9) {
+      otaUpTarget = 1; otaUpFw = true;
+      LOG_I(TAG, "OTA upload: firmware '%s'\n", filename.c_str());
+      if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) { Update.printError(Serial); otaUpErr = true; otaUpTarget = 0; }
+    } else {
+      otaUpTarget = 2; otaUpFs = true;
+      LOG_I(TAG, "OTA upload: filesystem '%s'\n", filename.c_str());
+      otaUpFsFile = LittleFS.open(OTA_FS_TMP, "w");
+      if (!otaUpFsFile) { otaUpErr = true; otaUpTarget = 0; }
+    }
+  }
+  if (otaUpErr) return;
+  if (otaUpTarget == 1) {
+    if (Update.write(data, len) != len) { Update.printError(Serial); otaUpErr = true; }
+  } else if (otaUpTarget == 2) {
+    if (otaUpFsFile) otaUpFsFile.write(data, len);
+  }
+  if (final) {
+    if (otaUpTarget == 1) { if (!Update.end(true)) { Update.printError(Serial); otaUpErr = true; } }
+    else if (otaUpTarget == 2) { if (otaUpFsFile) otaUpFsFile.close(); }
+    otaUpTarget = 0;
+  }
+}
+
 void SetupAsyncServer() {
   Serial.println("SetupAsyncServer()\n");
   for(int i=0; i<7; i++) { bootid[i]=random(26)+'A'; }
@@ -1969,6 +2054,27 @@ void SetupAsyncServer() {
   server.on("/bootid", HTTP_GET, [](AsyncWebServerRequest * request) {
     request->send(200, "text/plain", bootid);
   });
+
+  // Upload firmware (update.ino.bin) and/or filesystem (update.fs.bin) directly from the
+  // browser. Gated by the hidden allowfileupload config option; admin-only. handleOtaUpload
+  // streams the parts; this completion handler unpacks any filesystem archive and reboots.
+  server.on("/uploadota", HTTP_POST, [](AsyncWebServerRequest * request) {
+    if(!isAuthenticated(request, 2)) return;   // admin-only (sends login redirect if not)
+    bool enabled = sonde.config.allowfileupload;
+    bool ok = enabled && otaUpInProgress && !otaUpErr && (otaUpFw || otaUpFs);
+    if (ok && otaUpFs) {                        // unpack the buffered filesystem archive
+      File f = LittleFS.open(OTA_FS_TMP, "r");
+      if (!f || unpackFsArchive(f) < 0) ok = false;
+      if (f) f.close();
+    }
+    if (otaUpFs) LittleFS.remove(OTA_FS_TMP);
+    otaUpInProgress = false;
+    const char *msg = !enabled ? "File upload is disabled (set allowfileupload=1)."
+                    : ok       ? "Update applied. Rebooting..."
+                               : "Update failed. See the serial log.";
+    request->send(enabled ? (ok ? 200 : 500) : 403, "text/plain", msg);
+    if (ok) otaRebootAt = millis() + 1500;      // reboot after the response is delivered
+  }, handleOtaUpload);
 
   server.on("/status.json", HTTP_GET, [](AsyncWebServerRequest * request) {
    int nr = 0;
@@ -3624,40 +3730,13 @@ void execOTA() {
   if (res < 0) {
     ; // no-op
   } else {
-    // process data...
-    while (client.available()) {
-      // get header...
-      char fn[128];
-      fn[0] = '/';
-      size_t fnlen = client.readBytesUntil('\n', fn + 1, sizeof(fn) - 2);
-      fn[1 + fnlen] = 0;   // readBytesUntil does not terminate; also keeps the write in bounds
-      char *sz = strchr(fn, ' ');
-      if (!sz) {
-        client.stop();
-        enterMode(ST_DECODER);
-        return;
-      }
-      *sz = 0;
-      int len = atoi(sz + 1);
-      LOG_I(TAG, "Updating file %s (%d bytes)\n", fn, len);
-      char fnstr[17];
-      memset(fnstr, ' ', 16);
-      strncpy(fnstr, fn, 16);
-      fnstr[16] = 0;
-      disp.rdis->drawString(0, 2 * dispys, fnstr);
-      File f = LittleFS.open(fn, FILE_WRITE);
-      // read sz bytes........
-      while (len > 0) {
-        unsigned char buf[1024];
-        int r = client.read(buf, len > 1024 ? 1024 : len);
-        if (r == -1) {
-          client.stop();
-          enterMode(ST_DECODER);
-          return;
-        }
-        f.write(buf, r);
-        len -= r;
-      }
+    // Unpack the filesystem archive directly from the network stream (shared with the
+    // web file-upload path, see unpackFsArchive).
+    disp.rdis->drawString(0, 2 * dispys, "Updating files");
+    if (unpackFsArchive(client) < 0) {
+      client.stop();
+      enterMode(ST_DECODER);
+      return;
     }
     client.stop();
   }
@@ -3826,6 +3905,9 @@ void loop() {
                 mainState, currentDisplay, lastDisplay, ESP.getFreeHeap(), uxTaskGetStackHighWaterMark(0));
 
   Log.handleImprov();
+
+  // Deferred reboot requested by the web file-upload OTA (after its response was sent).
+  if (otaRebootAt && millis() > otaRebootAt) { Serial.println("Rebooting after file upload"); ESP.restart(); }
 
 #ifndef REMOVE_ALL_FOR_TESTING
   switch (mainState) {
