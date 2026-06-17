@@ -18,6 +18,7 @@ import json
 import math
 import os
 import random
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PLACEHOLDERS = {
@@ -208,6 +209,11 @@ MOCK_JSON = {
 }
 
 
+# Wall-clock time of the last update-triggering POST. /bootid uses it to simulate a
+# device reboot a few seconds later (a changed bootid is how the update dialog detects
+# completion). 0 = no update triggered yet.
+_UPDATE_AT = [0.0]
+
 # Synthetic spectrum for /spectrum.json (scanplot.html). A noisy baseline with a
 # few peaks and one tall mid-band spike; seq increments so the page animates.
 _SPECTRUM_SEQ = [0]
@@ -248,6 +254,11 @@ def make_handler(root):
             self.wfile.write(body)
 
         def do_POST(self):
+            path = self.path.split("?")[0]
+            # An update/restore reboots the device; record it so /bootid can simulate
+            # the device coming back with a new bootid a few seconds later.
+            if path in ("/update.html", "/uploadota", "/config.html", "/qrg.html"):
+                _UPDATE_AT[0] = time.time()
             # auth/user endpoints: just acknowledge so the JS doesn't error
             self._send(200, "text/plain", "ok")
 
@@ -272,6 +283,13 @@ def make_handler(root):
                 return
             if path == "/spectrum.json":
                 self._send(200, "application/json", json.dumps(gen_spectrum()))
+                return
+            # Boot nonce used by the update dialog to detect a reboot. Returns a new
+            # value ~8s after an update was triggered, simulating the device rebooting.
+            if path == "/bootid":
+                rebooted = _UPDATE_AT[0] and (time.time() - _UPDATE_AT[0]) > 8
+                self._send(200, "text/plain",
+                           "preview-boot-2" if rebooted else "preview-boot-1")
                 return
             # Mock the public update server's version pages so upd.html's update
             # validation can be exercised locally. Installed is teste20260616-C3

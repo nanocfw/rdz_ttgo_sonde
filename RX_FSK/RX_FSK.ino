@@ -1963,6 +1963,13 @@ void SetupAsyncServer() {
     request->send(LittleFS, "/upd.html", String(), false, processor);
   });
 
+  // Current boot nonce; the update page polls this to detect when the device has
+  // finished flashing and rebooted (the bootid changes on each boot). Unauthenticated
+  // on purpose: it carries no secret and must stay reachable across the reboot.
+  server.on("/bootid", HTTP_GET, [](AsyncWebServerRequest * request) {
+    request->send(200, "text/plain", bootid);
+  });
+
   server.on("/status.json", HTTP_GET, [](AsyncWebServerRequest * request) {
    int nr = 0;
    AsyncWebServerResponse *response = request->beginChunkedResponse("application/json", [nr](uint8_t *buf, size_t maxLen, size_t index) mutable-> size_t {

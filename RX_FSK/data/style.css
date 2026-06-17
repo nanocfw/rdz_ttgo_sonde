@@ -39,6 +39,14 @@ body, html {
 	color: #545454;
 	margin: 0 0 1.5em;
 }
+/* Progress dialog (showProgress): spinner + bold title above the message. */
+.modal-spinner {
+	width: 42px; height: 42px; margin: 0.1em auto 1.1em;
+	border: 4px solid #e6e6e6; border-top-color: #04AA6D;
+	border-radius: 50%; animation: modalSpin 0.9s linear infinite;
+}
+.modal-title { font-size: 1.2em; font-weight: 700; color: #333; margin: 0 0 0.55em; }
+@keyframes modalSpin { to { transform: rotate(360deg); } }
 .modal-actions {
 	display: flex;
 	flex-direction: row-reverse;   /* confirm on the left, cancel on the right (SweetAlert2 order) */
@@ -76,7 +84,7 @@ body, html {
 	100% { transform: scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-	.modal-overlay, .modal-box { animation: none; }
+	.modal-overlay, .modal-box, .modal-spinner { animation: none; }
 }
 
 .system-info {

@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" type="text/css" href="style.css?v=%VERSION_ID%">
+  <script src="dialog.js?v=%VERSION_ID%"></script>
   <style>
     /* Update page: keep the table and each method section in one centered column. */
     .upd-version { max-width: 640px; margin: 18px auto; }
@@ -87,6 +88,7 @@
 <script>
 const localEnabled = "%LOCAL_UPDATES%";
 const installed = "%FULLNAMEID%".trim();   // e.g. teste20260616-C3
+const initialBootID = "%BOOTID%";          // changes when the device reboots after updating
 
 document.addEventListener("DOMContentLoaded", () => {
   // The local-update-from-URL section is a developer feature; hide it unless a
@@ -151,6 +153,40 @@ checkVersion("main", document.getElementById("verMain"),
              document.getElementById("stMain"), document.getElementById("btnMain"));
 checkVersion("dev2", document.getElementById("verDev2"),
              document.getElementById("stDev2"), document.getElementById("btnDev2"));
+
+// Intercept the online / local-URL update forms: confirm, POST in the background,
+// then show a progress dialog that polls for the reboot and reloads. Submitting
+// normally would navigate away to the firmware's plain "wait until reboot" text.
+function startServerUpdate(form, submitter) {
+  // Build the urlencoded body in the order the firmware expects: the action button
+  // (main/dev2/local) first, and for a local update the url field AFTER "local".
+  const body = new URLSearchParams();
+  body.append(submitter.name, submitter.value);
+  if (submitter.name === "local") {
+    const u = form.querySelector("[name=url]");
+    if (u) body.append("url", u.value);
+  }
+  const dlg = showProgress("Sending update request…", "Updating");
+  fetch(form.action, { method: "POST", body: body, credentials: "same-origin" })
+    .then(r => {
+      if (!r.ok) return r.text().then(t => { throw new Error(t || ("HTTP " + r.status)); });
+      dlg.close();
+      waitForRebootAndReload(initialBootID, "Updating",
+        "The device is downloading and flashing the new version, then it will reboot. " +
+        "Do not power it off.");
+    })
+    .catch(err => { dlg.close(); showAlert("Could not start update: " + err.message); });
+}
+
+document.querySelectorAll('form[action="update.html"]').forEach(form => {
+  form.addEventListener("submit", e => {
+    e.preventDefault();
+    const sub = e.submitter || form.querySelector("input[type=submit]");
+    if (!sub || sub.disabled) return;
+    showConfirm(sub.value + " now?\nThe device will reboot after updating.")
+      .then(ok => { if (ok) startServerUpdate(form, sub); });
+  });
+});
 </script>
 </body>
 </html>
