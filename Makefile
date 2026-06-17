@@ -18,8 +18,12 @@ PIO ?= /home/dev-python/.pio-venv/bin/pio
 PENV_BIN ?= /home/dev-python/.platformio/penv/bin
 MERGE_PATH := PATH=$(PENV_BIN):$$PATH
 
+# Build artifact locations (PlatformIO env is ttgo-lora32, see platformio.ini).
+BUILD_DIR := .pio/build/ttgo-lora32
+OTA_DIR   := $(BUILD_DIR)/ota
+
 .DEFAULT_GOAL := build
-.PHONY: build upload uploadfs buildfs uploadfonts monitor image clean help
+.PHONY: build upload uploadfs buildfs uploadfonts monitor image ota clean help
 
 build: ## Compile firmware
 	$(PIO) run
@@ -42,6 +46,14 @@ monitor: ## Open the serial monitor (115200 baud)
 image: buildfs ## Build the merged single-file firmware-image.bin (bootloader+partitions+app+fonts+fs)
 	$(MERGE_PATH) $(PIO) run --target firmware
 	@echo "Merged image: .pio/build/ttgo-lora32/firmware-image.bin"
+
+ota: build ## Build OTA artifacts (update.ino.bin + update.fs.bin) into .pio/build/ttgo-lora32/ota
+	mkdir -p $(OTA_DIR)
+	cp $(BUILD_DIR)/firmware.bin $(OTA_DIR)/update.ino.bin
+	python3 scripts/makefsupdate.py RX_FSK/data > $(OTA_DIR)/update.fs.bin
+	@echo "OTA artifacts in $(OTA_DIR):"
+	@echo "  update.ino.bin (app)  +  update.fs.bin (.js/.html/.css)"
+	@echo "Serve this dir over HTTP and point the web Local-Update button at it."
 
 clean: ## Remove build artifacts
 	$(PIO) run --target clean
