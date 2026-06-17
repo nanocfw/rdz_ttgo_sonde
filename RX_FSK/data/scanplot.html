@@ -44,6 +44,7 @@ let info = document.getElementById('info');
 let banner = document.getElementById('banner');
 let stamp = document.getElementById('stamp');
 let lastJson = null;
+let plot = null;           // cached geometry + pixel snapshot for the crosshair overlay
 
 function median(arr) {
   let s = [...arr].sort((a, b) => a - b);
@@ -118,6 +119,65 @@ function draw() {
     if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
   ctx.stroke();
+
+  // cache geometry + a clean snapshot so the mouse crosshair can be drawn
+  // (and erased) without re-rendering the whole plot on every mousemove
+  plot = {
+    ML, MR, MT, MB, pw, ph, W, H, n, start, step, data,
+    xFor, yFor,
+    snapshot: ctx.getImageData(0, 0, cv.width, cv.height)
+  };
+}
+
+// draw a vertical/horizontal crosshair through the data point nearest the
+// cursor, with a label showing the exact frequency and power at that point
+function drawCrosshair(ev) {
+  if (!plot) return;
+  let p = plot;
+  let rect = cv.getBoundingClientRect();
+  // map the client coords to CSS pixels of the canvas backing store
+  let mx = (ev.clientX - rect.left) * (cv.clientWidth / rect.width);
+  let my = (ev.clientY - rect.top) * (cv.clientHeight / rect.height);
+
+  ctx.putImageData(p.snapshot, 0, 0);   // restore the clean plot
+
+  // outside the plot area -> just leave the clean plot showing
+  if (mx < p.ML || mx > p.W - p.MR || my < p.MT || my > p.MT + p.ph) return;
+
+  // snap to the nearest bin
+  let i = Math.round((mx - p.ML) / p.pw * (p.n - 1));
+  if (i < 0) i = 0; else if (i > p.n - 1) i = p.n - 1;
+  let x = p.xFor(i), y = p.yFor(p.data[i]);
+  let freq = p.start + i * p.step;
+  let pwr = p.data[i];
+
+  // crosshair: full column + row through the point
+  ctx.strokeStyle = '#cc6'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.moveTo(x, p.MT); ctx.lineTo(x, p.MT + p.ph);          // column
+  ctx.moveTo(p.ML, y); ctx.lineTo(p.W - p.MR, y);           // line
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // point marker
+  ctx.fillStyle = '#ff5'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(x, y, 3.5, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+
+  // readout label, kept inside the plot area
+  let txt = freq.toFixed(3) + ' MHz   ' + pwr.toFixed(1) + ' dBm';
+  ctx.font = '12px sans-serif'; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+  let padX = 6, padY = 4, lh = 14;
+  let tw = ctx.measureText(txt).width;
+  let bw = tw + 2 * padX, bh = lh + 2 * padY;
+  let bx = x + 10, by = y - bh - 8;
+  if (bx + bw > p.W - p.MR) bx = x - bw - 10;               // flip left near right edge
+  if (bx < p.ML) bx = p.ML;
+  if (by < p.MT) by = y + 10;                               // drop below near top
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = '#cc6'; ctx.strokeRect(bx, by, bw, bh);
+  ctx.fillStyle = '#ffd';
+  ctx.fillText(txt, bx + padX, by + padY);
 }
 
 async function poll() {
@@ -154,6 +214,8 @@ async function poll() {
   }
 }
 window.addEventListener('resize', draw);
+cv.addEventListener('mousemove', drawCrosshair);
+cv.addEventListener('mouseleave', () => { if (plot) ctx.putImageData(plot.snapshot, 0, 0); });
 poll();
 </script>
 </body>
