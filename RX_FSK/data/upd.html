@@ -1,62 +1,156 @@
-<html><head>
-<link rel="stylesheet" type="text/css" href="style.css?v=%VERSION_ID%">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>rdzTTGOSonde Update</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" type="text/css" href="style.css?v=%VERSION_ID%">
+  <style>
+    /* Update page: keep the table and each method section in one centered column. */
+    .upd-version { max-width: 640px; margin: 18px auto; }
+    .upd-version td:first-child { font-weight: bold; width: 12em; }
+    .upd-section { margin: 22px auto; max-width: 640px; }
+    .upd-section h2 { font-size: 18px; margin: 0 0 8px; }
+    .upd-note { color: #777; font-size: 13px; line-height: 1.5; }
+    .upd-url { padding: 6px 8px; box-sizing: border-box; max-width: 100%; }
+    /* Per-branch update status shown under the version in its table row. */
+    .upd-status { display: block; font-size: 13px; margin-top: 3px; }
+    .upd-ok   { color: #04AA6D; }
+    .upd-info { color: #555; }
+    .upd-warn { color: #b00; }
+    .updbtn {
+      background-color: #04AA6D; color: #fff; border: none; border-radius: 5px;
+      padding: 9px 22px; font-size: 14px; cursor: pointer; margin: 4px 6px 4px 0;
+      transition: background-color .3s ease;
+    }
+    .updbtn:hover { background-color: #038f5b; }
+    .updbtn:active { transform: translateY(1px); }
+    .updbtn:disabled { background-color: #9bbfae; cursor: not-allowed; }
+  </style>
 </head>
 <body>
+<div class="wrapper">
+  <div class="header"><div id="myTopnav" class="topnav">
+    <a href="/index.html" class="tablinks">Home</a>
+    <a class="tablinks active">Update</a>
+  </div></div>
+  <div class="tabcontent" style="display: flex;">
+    <div class="system-info">
+      <h1>Firmware &amp; Filesystem Update</h1>
 
+      <!-- Installed vs. available versions; each available row also shows whether an
+           online update to it is allowed (set by checkVersion()). -->
+      <table class="status-table upd-version">
+        <tr><td>Currently installed</td><td>%FULLNAMEID%</td></tr>
+        <tr><td>Available (main)</td><td>
+          <span id="verMain">(&hellip;checking&hellip;)</span>
+          <span id="stMain" class="upd-status"></span></td></tr>
+        <tr><td>Available (dev2)</td><td>
+          <span id="verDev2">(&hellip;checking&hellip;)</span>
+          <span id="stDev2" class="upd-status"></span></td></tr>
+      </table>
 
-<form action="update.html" method="post"><p>Currently installed: %FULLNAMEID%</p>
-<p>
-Available main: <span id="masterDiv">(...checking...)</span>
+      <!-- Online update: pulls from rdzsonde.org over the device's WiFi. Each button is
+           enabled/disabled by checkVersion() based on the suffix comparison. -->
+      <form class="upd-section" action="update.html" method="post">
+        <h2>Online update</h2>
+        <p class="upd-note">Requires the device to have Internet access via WiFi.</p>
+        <input class="updbtn" id="btnMain" type="submit" name="main" value="Update from Main">
+        <input class="updbtn" id="btnDev2" type="submit" name="dev2" value="Update from Dev2">
+      </form>
 
-<br>
-Available dev2: <span id="develDiv">(...checking...)</span>
+      <!-- Local update from a URL (developer feature; hidden unless enabled) -->
+      <form class="upd-section" id="local-update-section" action="update.html" method="post">
+        <h2>Local update from URL</h2>
+        <p class="upd-note" id="local-update-info">Developer feature: a server path
+          containing <tt>update.ino.bin</tt> and <tt>update.fs.bin</tt>.</p>
+        <!-- The Local-Update button must precede the URL field: the firmware only honors
+             the "url" parameter once it has already seen "local" in submission order. -->
+        <input class="updbtn" type="submit" name="local" value="Update from URL"> from
+        <input class="upd-url" type="text" name="url" value="%LOCAL_UPDATES%" size="48">
+      </form>
 
-</p>
-<input type="submit" name="main" value="Main-Update"></input><br>
-<input type="submit" name="dev2" value="Dev-Update"><br>
-<div id="local-update-section">
-  <input type="submit" name="local" value="Local-Update"> from
-  <input type="text" name="url" value="%LOCAL_UPDATES%" size="64"><br>
+      <div class="upd-section">
+        <p class="upd-note">
+          If the version suffix <b>letter</b> differs, a full re-flash over USB is
+          mandatory and the update will not work. If only the <b>number</b> differs,
+          the update includes filesystem changes but is safe to apply. If the suffix
+          is identical, the update applies fully.
+        </p>
+      </div>
+    </div>
+    <div class="footer"><span></span><span class="ttgoinfo">rdzTTGOserver %VERSION_ID%</span></div>
+  </div>
 </div>
-</form>
-
-<p>Note: If suffix is the same, update should work fully. If the number is
-different, update contains changes in the file system. A full re-flash is
-required to get all new features, but the update should not break anything.
-If the letter is different, a full re-flash is mandatory, update will not
-work.</p>
-<p id="local-update-info">
-The local-update feature is for developers and requires a path containing
-<tt>update.fs.bin</tt> and <tt>update.ino.bin</tt>.
-</p>
 
 <script>
 const localEnabled = "%LOCAL_UPDATES%";
+const installed = "%FULLNAMEID%".trim();   // e.g. teste20260616-C3
 
 document.addEventListener("DOMContentLoaded", () => {
+  // The local-update-from-URL section is a developer feature; hide it unless a
+  // local update server has been configured (localupd.txt -> %LOCAL_UPDATES%).
   if (localEnabled.trim() === "") {
-    // Hide the local update section
-    const localUpdateSection = document.getElementById("local-update-section");
-    const localUpdateInfo = document.getElementById("local-update-info");
-    if (localUpdateSection) localUpdateSection.style.display = "none";
-    if (localUpdateInfo) localUpdateInfo.style.display = "none";
+    const sec = document.getElementById("local-update-section");
+    if (sec) sec.style.display = "none";
   }
 });
 
-const masterInfo = document.getElementById('masterDiv');
-const develInfo = document.getElementById('develDiv');
+// On a real device the page is served from the device's IP and pulls version info
+// from the public update server. Under the local preview server (localhost, or its
+// :8099 port) the same paths are mocked, so fetch them same-origin.
+const isPreview = location.hostname === "localhost" ||
+                  location.hostname === "127.0.0.1" || location.port === "8099";
+const UPD_HOST = isPreview ? "" : "http://rdzsonde.org";
 
-let request = new XMLHttpRequest();
-request.open('GET', 'http://rdzsonde.org/main/update-info.html');
-request.onload = function() {
-  masterInfo.innerHTML = request.response.replace(/<[^>]*>/g, '');
+// Version strings look like <version_id>-<Letter><Number> (Letter=filesystem major,
+// Number=filesystem minor). The suffix is the final '-' token.
+function suffixOf(id) {
+  let tok = (id || "").trim().split("-").pop();
+  let m = /^([A-Za-z]+)(\d+)$/.exec(tok);
+  return m ? { letter: m[1].toUpperCase(), number: parseInt(m[2], 10), raw: tok } : null;
 }
-request.send();
-let drequest = new XMLHttpRequest();
-drequest.open('GET', 'http://rdzsonde.org/dev2/update-info.html');
-drequest.onload = function() {
-  develInfo.innerHTML= drequest.response.replace(/<[^>]*>/g, '');;
+const insSuf = suffixOf(installed);
+
+// Decide whether an online update to `avail` may be applied, and explain why.
+// Letter differs  -> filesystem layout incompatible, USB re-flash required (block).
+// Number differs  -> filesystem content changed but safe to apply online (allow).
+// Identical        -> applies fully (allow). Unknown -> allow (can't validate).
+function classify(avail) {
+  let av = suffixOf(avail);
+  if (!insSuf || !av) return { ok: true, level: "upd-info", msg: "" };
+  if (av.letter !== insSuf.letter)
+    return { ok: false, level: "upd-warn", msg: "✗ Incompatible filesystem (" +
+             insSuf.letter + "→" + av.letter + ") — USB re-flash required" };
+  if (av.number !== insSuf.number)
+    return { ok: true, level: "upd-info", msg: "Filesystem changes (" + insSuf.raw +
+             "→" + av.raw + ") — safe to apply online" };
+  return { ok: true, level: "upd-ok", msg: "✓ Up to date — applies fully" };
 }
-drequest.send();
+
+// Fetch an "available version" string, show it, set its status, and gate its button.
+function checkVersion(branch, verEl, stEl, btn) {
+  let req = new XMLHttpRequest();
+  req.open("GET", UPD_HOST + "/" + branch + "/update-info.html");
+  req.onload = () => {
+    let avail = req.response.replace(/<[^>]*>/g, "").trim();
+    verEl.textContent = avail || "(unknown)";
+    let c = classify(avail);
+    btn.disabled = !c.ok;
+    stEl.textContent = c.msg;
+    stEl.className = "upd-status " + c.level;
+  };
+  req.onerror = () => {
+    // Can't validate without the available version; leave the button usable.
+    verEl.textContent = "(unavailable)";
+  };
+  req.send();
+}
+checkVersion("main", document.getElementById("verMain"),
+             document.getElementById("stMain"), document.getElementById("btnMain"));
+checkVersion("dev2", document.getElementById("verDev2"),
+             document.getElementById("stDev2"), document.getElementById("btnDev2"));
 </script>
-</body></html>
+</body>
+</html>

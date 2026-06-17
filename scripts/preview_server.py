@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 PLACEHOLDERS = {
     "%VERSION_NAME%": "rdzTTGOSonde",
     "%VERSION_ID%": "devel20260615",
-    "%FULLNAMEID%": "rdzTTGOSonde devel20260615",
+    "%FULLNAMEID%": "teste20260616-C3",
     "%AUTODETECT_INFO%": "TTGO LoRa32 v2.1 (auto-detected)",
     "%LOCAL_UPDATES%": "",
     "%MAPCENTER%": "48.0,11.0,10",
@@ -272,6 +272,15 @@ def make_handler(root):
                 return
             if path == "/spectrum.json":
                 self._send(200, "application/json", json.dumps(gen_spectrum()))
+                return
+            # Mock the public update server's version pages so upd.html's update
+            # validation can be exercised locally. Installed is teste20260616-C3
+            # (see %FULLNAMEID%): main differs by letter (C->D, blocked), dev2 differs
+            # by number (3->5, allowed with a "filesystem changes" note).
+            if path in ("/main/update-info.html", "/dev2/update-info.html"):
+                ver = "teste20260616-D3" if path.startswith("/main") else "teste20260616-C5"
+                self._send(200, "text/html",
+                           "<html><body><p>%s</p></body></html>" % ver)
                 return
             if path in MOCK_JSON:
                 self._send(200, "application/json", json.dumps(MOCK_JSON[path]))
