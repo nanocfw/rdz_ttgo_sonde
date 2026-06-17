@@ -105,20 +105,25 @@
   // action that reboots the device (firmware update, config/qrg restore, ...).
   global.waitForRebootAndReload = function (fromId, title, body) {
     body = body || 'The device is restarting.';
+    fromId = (fromId || '').trim();
     var dlg = showProgress(body, title || 'Please wait');
-    var start = Date.now(), MAX_MS = 5 * 60 * 1000, GRACE_MS = 4000;
+    var start = Date.now(), MAX_MS = 5 * 60 * 1000, GRACE_MS = 4000, sawDown = false;
+    function reload() { (window.top || window).location.reload(); }
     function poll() {
-      if (Date.now() - start > MAX_MS) { dlg.update('Taking longer than expected — reloading…'); location.reload(); return; }
+      if (Date.now() - start > MAX_MS) { dlg.update('Taking longer than expected — reloading…'); reload(); return; }
       var el = Math.round((Date.now() - start) / 1000);
       dlg.update(body + '\n\nWaiting for the device to reboot… (' + el + ' s)');
       fetch('/bootid', { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.text() : Promise.reject(); })
         .then(function (id) {
           id = (id || '').trim();
-          if (id && id !== fromId) { dlg.setTitle('Done'); dlg.update('Device is back online — reloading…'); setTimeout(function () { location.reload(); }, 800); }
+          // With a known baseline, the bootid changing means it rebooted. Without one
+          // (capture failed), wait until we've seen it go down and come back instead.
+          var back = fromId ? (id && id !== fromId) : (sawDown && id);
+          if (back) { dlg.setTitle('Done'); dlg.update('Device is back online — reloading…'); setTimeout(reload, 800); }
           else setTimeout(poll, 3000);
         })
-        .catch(function () { setTimeout(poll, 3000); });   // device down mid-reboot; keep trying
+        .catch(function () { sawDown = true; setTimeout(poll, 3000); });   // device down mid-reboot
     }
     setTimeout(poll, GRACE_MS);
     return dlg;

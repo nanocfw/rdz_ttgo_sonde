@@ -50,7 +50,7 @@ function footer() {
 /* Upload a local file to LittleFS, forcing its on-device name (e.g. qrg.txt / config.txt),
    then reboot so the device re-reads it. Used by the qrg.html and config.html forms in
    RX_FSK.ino. 'what' is a human description used in the confirmation prompt.
-   Relies on showAlert()/showConfirm() from dialog.js (loaded by both forms). */
+   Relies on showConfirm()/showProgress()/waitForRebootAndReload() from dialog.js. */
 function uploadCfgFile(inputId, dest, what) {
   var inp = document.getElementById(inputId);
   if (!inp || !inp.files || inp.files.length === 0) {
@@ -64,23 +64,27 @@ function uploadCfgFile(inputId, dest, what) {
       if (!ok) return;
       var fd = new FormData();
       fd.append("file", f, dest);   // force the destination filename regardless of the picked file's name
-      return fetch("/file", { method: "POST", body: fd })
-        .then(function (r) {
-          if (!r.ok) throw new Error("HTTP " + r.status);
-          return showAlert("Upload complete. The device will now reboot to apply " + dest +
-                           ".\n\nThis page reloads automatically once it is back.");
+      var dlg = showProgress("Uploading " + dest + "…", "Updating " + what);
+      // Capture the current boot nonce so the reboot can be detected afterwards.
+      fetch("/bootid", { cache: "no-store" })
+        .then(function (r) { return r.ok ? r.text() : ""; })
+        .catch(function () { return ""; })
+        .then(function (before) {
+          return fetch("/file", { method: "POST", body: fd })
+            .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); })
+            .then(function () {
+              // Trigger the reboot; the device restarts immediately, so this won't get a response.
+              fetch("/control.html", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: "reboot=1"
+              }).catch(function () {});
+              // Swap the dialog to the reboot watcher, which reloads once the device is back.
+              waitForRebootAndReload((before || "").trim(), "Updating " + what,
+                "The " + what + " was uploaded. The device is rebooting to apply it.");
+            });
         })
-        .then(function () {
-          // Trigger the reboot; the device restarts immediately, so this request won't get a response.
-          fetch("/control.html", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: "reboot=1"
-          }).catch(function () {});
-          // Give the device time to reboot and rejoin WiFi, then reload to pick up the new state.
-          setTimeout(function () { (window.top || window).location.reload(); }, 15000);
-        })
-        .catch(function (e) { showAlert("Upload failed: " + e.message); });
+        .catch(function (e) { dlg.close(); showAlert("Upload failed: " + e.message); });
     });
 }
 

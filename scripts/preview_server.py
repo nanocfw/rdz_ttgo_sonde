@@ -80,9 +80,12 @@ _SVG_RESTORE = (_SVG_OPEN +
 
 
 def _backup_footer(idd, fname, label):
-    # Simplified version of QRG_/CONFIG_BACKUP_FOOTER (download/save + restore icon buttons)
+    # Simplified version of QRG_/CONFIG_BACKUP_FOOTER (download/save + restore icon buttons).
+    # The file input wires uploadCfgFile() onchange, matching the device, so the
+    # restore-then-reboot flow (progress dialog + reload) is testable in preview.
     return (
-        '<input type="file" id="%s" accept=".txt" style="display:none">' % idd +
+        '<input type="file" id="%s" accept=".txt" style="display:none" '
+        'onchange="uploadCfgFile(\'%s\',\'%s\',\'%s\')">' % (idd, idd, fname, label) +
         '<span class="bkpbtns">'
         '<a class="iconbtn" href="/file/%s" title="Download backup (%s)">%s</a>' % (fname, fname, _SVG_SAVE) +
         '<button type="button" class="iconbtn" title="Restore from file (%s)" '
@@ -255,9 +258,10 @@ def make_handler(root):
 
         def do_POST(self):
             path = self.path.split("?")[0]
-            # An update/restore reboots the device; record it so /bootid can simulate
-            # the device coming back with a new bootid a few seconds later.
-            if path in ("/update.html", "/uploadota", "/config.html", "/qrg.html"):
+            # These POSTs reboot the device (OTA, file-upload OTA, or an explicit reboot
+            # after a config/qrg restore); record it so /bootid can simulate the device
+            # coming back with a new bootid a few seconds later.
+            if path in ("/update.html", "/uploadota", "/control.html"):
                 _UPDATE_AT[0] = time.time()
             # auth/user endpoints: just acknowledge so the JS doesn't error
             self._send(200, "text/plain", "ok")
