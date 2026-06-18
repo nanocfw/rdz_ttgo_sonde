@@ -40,19 +40,54 @@ PLACEHOLDERS = {
 DEVICE_GENERATED = {}
 
 # Control page: reproduce the buttons the firmware's createControlForm() emits, so the
-# real layout/styling can be previewed locally (name -> label, must match RX_FSK.ino).
-CONTROL_BUTTONS = [
-    ("rx", "Receiver/next freq. (short keypress)"),
-    ("scan", "Scanner (double keypress)"),
-    ("spec", "Spectrum (medium keypress)"),
-    ("wifi", "WiFi (long keypress)"),
-    ("rx2", "Button 2/next screen (short keypress)"),
-    ("scan2", "Button 2 (double keypress)"),
-    ("spec2", "Button 2 (medium keypress)"),
-    ("wifi2", "Button 2 (long keypress)"),
-    ("rinex", "Update RS92 RINEX eph"),
-    ("format", "Format SD Card"),
-    ("reboot", "Reboot"),
+# real layout/styling can be previewed locally (must match RX_FSK.ino).
+#
+# The first 8 buttons (key1/key2 short/double/medium/long) are labelled dynamically from
+# the current screen's actions[1..8] -- mirror that here. Action codes are the ACT_* values
+# in src/Sonde.h; action_descr() mirrors actionDescr() in RX_FSK.ino.
+ACT_NONE = 255
+ACT_DISPLAY_SCANNER = 0
+ACT_FORMAT_SD = 59
+ACT_RINEX_UPDATE = 60
+ACT_DISPLAY_WIFI = 61
+ACT_DISPLAY_SPECTRUM = 62
+ACT_DISPLAY_DEFAULT = 63
+ACT_DISPLAY_NEXT = 64
+ACT_NEXTSONDE = 65
+ACT_PREVSONDE = 66
+ACT_MAXDISPLAY = 50
+
+_ACT_LABELS = {
+    ACT_NONE: "no function",
+    ACT_DISPLAY_SCANNER: "scanner",
+    ACT_DISPLAY_WIFI: "WiFi screen",
+    ACT_DISPLAY_SPECTRUM: "spectrum",
+    ACT_DISPLAY_DEFAULT: "default screen",
+    ACT_DISPLAY_NEXT: "next screen",
+    ACT_NEXTSONDE: "next frequency",
+    ACT_PREVSONDE: "previous frequency",
+    ACT_RINEX_UPDATE: "update RINEX",
+    ACT_FORMAT_SD: "format SD card",
+}
+
+
+def action_descr(act):
+    if act in _ACT_LABELS:
+        return _ACT_LABELS[act]
+    return ("screen %d" % act) if act < ACT_MAXDISPLAY else ("action %d" % act)
+
+
+# Sample current-screen key actions[1..8] (key1 then key2, each short/double/medium/long),
+# matching a typical default OLED layout, so the dynamic labels can be previewed.
+SAMPLE_ACTIONS = [ACT_NEXTSONDE, ACT_DISPLAY_SCANNER, ACT_DISPLAY_SPECTRUM, ACT_DISPLAY_WIFI,
+                  ACT_DISPLAY_NEXT, ACT_NONE, ACT_NONE, ACT_NONE]
+_KP_NAME = ["short", "double", "medium", "long"]
+CONTROL_KEYIDS = ["rx", "scan", "spec", "wifi", "rx2", "scan2", "spec2", "wifi2"]
+# Static (non-keypress) controls. "format" is admin-only (level 2) in the firmware.
+CONTROL_EXTRA = [
+    ("rinex", "Update RS92 RINEX eph", 1),
+    ("format", "Format SD Card", 2),
+    ("reboot", "Reboot", 1),
 ]
 
 
@@ -170,13 +205,24 @@ def render_config_page(version_id):
     )
 
 
-def render_control_page(version_id):
+def render_control_page(version_id, level=2):
     btns = ""
-    for i, (name, label) in enumerate(CONTROL_BUTTONS):
-        btns += ('<input class="ctlbtn" type="submit" name="%s" value="%s"></input>'
-                 % (name, label))
+    for i, name in enumerate(CONTROL_KEYIDS):
+        act = SAMPLE_ACTIONS[i]
+        descr = action_descr(act)
+        # Function first, then which button/keypress triggers it; capitalize the first letter.
+        label = "%s (button %d %s keypress)" % (
+            descr[:1].upper() + descr[1:], 1 if i < 4 else 2, _KP_NAME[i & 3])
+        dis = " disabled" if act == ACT_NONE else ""  # no function -> grey it out
+        btns += ('<input class="ctlbtn" type="submit" name="%s" value="%s"%s></input>'
+                 % (name, label, dis))
         if i == 3 or i == 7:
             btns += "<p></p>"
+    for name, label, minlevel in CONTROL_EXTRA:
+        if level < minlevel:
+            continue  # e.g. Format SD Card is hidden below admin (level 2)
+        btns += ('<input class="ctlbtn" type="submit" name="%s" value="%s"></input>'
+                 % (name, label))
     return (
         '<!DOCTYPE html><html><head><meta charset="UTF-8">'
         '<link rel="stylesheet" type="text/css" href="style.css"></head>'
@@ -292,7 +338,13 @@ def make_handler(root):
                 "/config.html": render_config_page,
             }
             if path in generated:
-                self._send(200, "text/html", generated[path](PLACEHOLDERS["%VERSION_ID%"]))
+                if path == "/control.html":
+                    # Mirror the firmware: Format SD Card is hidden below admin level.
+                    lvl = MOCK_JSON["/whoami.json"]["level"]
+                    body = render_control_page(PLACEHOLDERS["%VERSION_ID%"], lvl)
+                else:
+                    body = generated[path](PLACEHOLDERS["%VERSION_ID%"])
+                self._send(200, "text/html", body)
                 return
             if path == "/spectrum.json":
                 self._send(200, "application/json", json.dumps(gen_spectrum()))
