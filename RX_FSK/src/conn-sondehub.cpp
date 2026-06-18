@@ -693,7 +693,7 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
             "\"lat\": %.5f,"
             "\"lon\": %.5f,"
             "\"alt\": %.5f,"
-            "\"frequency\": %.3f,"
+            "\"frequency\": %.5f,"
             "\"vel_h\": %.5f,"
             "\"vel_v\": %.5f,"
             "\"heading\": %.5f,"
@@ -704,7 +704,7 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
             timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
             manufacturer_string[realtype], s->d.ser,
             ts.tm_year + 1900, ts.tm_mon + 1, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec,
-            (float)s->d.lat, (float)s->d.lon, (float)s->d.alt, (float)s->freq, (float)s->d.hs, (float)s->d.vs,
+            (float)s->d.lat, (float)s->d.lon, (float)s->d.alt, (float)(s->freq + s->afc / 1e6f), (float)s->d.hs, (float)s->d.vs,
             (float)s->d.dir, -((float)s->rssi / 2), s->d.vframe, sondeTypeStrSH[realtype]
                 );
     w += strlen(w);
@@ -729,6 +729,20 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
         char buf[11];
         if (RS41::getSubtype(buf, 11, s) == 0) {
             snprintf(w, SH_REMAIN, "\"subtype\": \"%s\",", buf);
+            w += strlen(w);
+        }
+        float txfreq;
+        if (RS41::getTxFrequencyMHz(&txfreq, s) == 0) {
+            snprintf(w, SH_REMAIN, "\"tx_frequency\": %.3f,", txfreq);
+            w += strlen(w);
+        }
+        if (RS41::getMainboard(buf, 11, s) == 0) {
+            snprintf(w, SH_REMAIN, "\"rs41_mainboard\": \"%s\",", buf);
+            w += strlen(w);
+        }
+        uint32_t fw;
+        if (RS41::getMainboardFW(&fw, s) == 0) {
+            snprintf(w, SH_REMAIN, "\"rs41_mainboard_fw\": %u,", fw);
             w += strlen(w);
         }
     }

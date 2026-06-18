@@ -1000,4 +1000,46 @@ int RS41::getSubtype(char *buf, int buflen, SondeInfo *si) {
 	return 0;
 }
 
+// Sonde-reported TX frequency, encoded at offset 0x002 (subframe block 0).
+// Decoded the same way as rs1729 rs41mod.c get_Calconf() / auto_rx, so the
+// value matches what other receivers report for the same sonde:
+//   freq[kHz] = 400000 + 40*hibyte + (lobyte & 0xC0)*10/64
+// (high byte = 40 kHz steps, top 2 bits of low byte = 10 kHz fine step).
+// Returns 0 on success.
+int RS41::getTxFrequencyMHz(float *freq, SondeInfo *si) {
+	struct subframeBuffer *sf = (struct subframeBuffer *)si->extra;
+	if(!sf) return -1;
+	if( !(sf->valid & 1ULL) ) return -1;   // block 0 not yet received
+	uint16_t f = sf->value.frequency;
+	if(f==0) return -1;
+	uint8_t lo = f & 0xFF, hi = (f >> 8) & 0xFF;
+	int freq_kHz = 400000 + 40 * hi + ((lo & 0xC0) * 10) / 64;
+	*freq = freq_kHz / 1000.0f;
+	return 0;
+}
+
+// Mainboard type string (e.g. "RSM412") at offset 0x222 (subframe block 0x22).
+int RS41::getMainboard(char *buf, int buflen, SondeInfo *si) {
+	struct subframeBuffer *sf = (struct subframeBuffer *)si->extra;
+	if(!sf) return -1;
+	if( !(sf->valid & (1ULL<<0x22)) ) return -1;   // block 0x22 not yet received
+	if(buflen>11) buflen=11;
+	strncpy(buf, (const char *)sf->value.names.mainboard, buflen);
+	buf[buflen-1]=0;
+	if(*buf==0) return -1;
+	return 0;
+}
+
+// Mainboard firmware version (10000*major + 100*minor + patch) at offset 0x015
+// (subframe block 1).
+int RS41::getMainboardFW(uint32_t *fw, SondeInfo *si) {
+	struct subframeBuffer *sf = (struct subframeBuffer *)si->extra;
+	if(!sf) return -1;
+	if( !(sf->valid & (1ULL<<1)) ) return -1;   // block 1 not yet received
+	uint16_t v = sf->value.firmwareVersion;
+	if(v==0) return -1;
+	*fw = v;
+	return 0;
+}
+
 RS41 rs41 = RS41();
