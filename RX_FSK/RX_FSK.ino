@@ -1209,21 +1209,72 @@ const char *ctrllabel[] = {"Receiver/next freq. (short keypress)", "Scanner (dou
 			   "Reboot"
                           };
 
-const char *createControlForm(int authLevel) {
+// Human-readable description of a display action code (see ACT_* in Sonde.h).
+// Used to label the control-page keypress buttons with what each press actually
+// does on the screen the device is currently showing.
+static const char *actionDescr(uint8_t act) {
+  switch (act) {
+    case ACT_NONE:             return "no function";
+    case ACT_DISPLAY_SCANNER:  return "scanner";
+    case ACT_DISPLAY_WIFI:     return "WiFi screen";
+    case ACT_DISPLAY_SPECTRUM: return "spectrum";
+    case ACT_DISPLAY_DEFAULT:  return "default screen";
+    case ACT_DISPLAY_NEXT:     return "next screen";
+    case ACT_NEXTSONDE:        return "next frequency";
+    case ACT_PREVSONDE:        return "previous frequency";
+    case ACT_RINEX_UPDATE:     return "update RINEX";
+    case ACT_FORMAT_SD:        return "format SD card";
+  }
+  static char abuf[20];
+  if (act < ACT_MAXDISPLAY) snprintf(abuf, sizeof(abuf), "screen %d", act);
+  else                      snprintf(abuf, sizeof(abuf), "action %d", act);
+  return abuf;
+}
+
+// True if action 'act' switches the active display to a different screen. Such a press
+// changes what every control button does, so the control page must reload to relabel them.
+static bool actionChangesScreen(uint8_t act) {
+  if (act == ACT_DISPLAY_NEXT || act == ACT_DISPLAY_DEFAULT) return true;
+  return act < ACT_MAXDISPLAY;   // ACT_DISPLAY(n): jump to a specific screen (incl. scanner)
+}
+
+const char *createControlForm(int authLevel, bool reloadAfter) {
   char *ptr = message;
   HTMLHEAD_V(ptr);
   strcat(ptr, "</head>");
   HTMLBODY(ptr, "control.html");
+  if (reloadAfter) {
+    // The press just queued a screen switch; the main loop applies it asynchronously.
+    // Reload (GET, so the press is not repeated) shortly after, to show the new labels.
+    strcat(ptr, "<script>setTimeout(function(){location.href='/control.html';},700);</script>");
+  }
+  // The first 8 control buttons (ctrlid rx/scan/spec/wifi + rx2/scan2/spec2/wifi2) map to the
+  // key1/key2 short/double/medium/long actions[1..8] of the current screen. Label them with
+  // what they actually do right now (function first, then which button/keypress triggers it),
+  // and disable the ones with no function; entries >= 8 keep their static label (RINEX/Format/Reboot).
+  static const char *kpName[] = {"short", "double", "medium", "long"};
+  char dynlabel[64];
   for (int i = 0; i < sizeof(ctrllabel)/sizeof((ctrllabel)[0]); i++) {
 #if FEATURE_SDCARD
     // Formatting the SD card is destructive: only offer it to admin (level 2) users.
     if (strcmp(ctrlid[i], "format") == 0 && authLevel < 2) continue;
 #endif
+    const char *label = ctrllabel[i];
+    bool disabled = false;
+    if (i < 8) {
+      uint8_t act = disp.layout ? disp.layout->actions[i + 1] : ACT_NONE;
+      snprintf(dynlabel, sizeof(dynlabel), "%s (button %d %s keypress)",
+               actionDescr(act), (i < 4) ? 1 : 2, kpName[i & 3]);
+      // Capitalize the first letter so it reads as a button caption.
+      if (dynlabel[0] >= 'a' && dynlabel[0] <= 'z') dynlabel[0] -= ('a' - 'A');
+      label = dynlabel;
+      disabled = (act == ACT_NONE);   // nothing happens on this press -> grey it out
+    }
     strcat(ptr, "<input class=\"ctlbtn\" type=\"submit\" name=\"");
     strcat(ptr, ctrlid[i]);
     strcat(ptr, "\" value=\"");
-    strcat(ptr, ctrllabel[i]);
-    strcat(ptr, "\"></input>");
+    strcat(ptr, label);
+    strcat(ptr, disabled ? "\" disabled></input>" : "\"></input>");
     if (i == 3 || i == 7 ) {
       strcat(ptr, "<p></p>");
     }
@@ -1238,35 +1289,26 @@ const char *createControlForm(int authLevel) {
 }
 
 
-const char *handleControlPost(AsyncWebServerRequest * request, int authLevel) {
+// Handle a control-page POST. Returns true if the press switched the active screen, so the
+// caller knows the control page should reload to relabel the (now changed) buttons.
+bool handleControlPost(AsyncWebServerRequest * request, int authLevel) {
   LOG_D(TAG, "Handling control post request");
+  bool screenChanged = false;
   int params = request->params();
   for (int i = 0; i < params; i++) {
     String param = request->getParam(i)->name();
-    LOG_D(TAG, "Contral post: %s\n", param.c_str());
-    if (param.equals("rx")) {
-      button1.pressed = KP_SHORT;
+    LOG_D(TAG, "Control post: %s\n", param.c_str());
+    // The 8 keypress buttons ctrlid[0..7] (rx/scan/spec/wifi + rx2/scan2/spec2/wifi2) map to
+    // button1/button2 short/double/medium/long, i.e. actions[1..8] of the current screen.
+    int kp = -1;
+    for (int k = 0; k < 8; k++) {
+      if (param.equals(ctrlid[k])) { kp = k; break; }
     }
-    else if (param.equals("scan")) {
-      button1.pressed = KP_DOUBLE;
-    }
-    else if (param.equals("spec")) {
-      button1.pressed = KP_MID;
-    }
-    else if (param.equals("wifi")) {
-      button1.pressed = KP_LONG;
-    }
-    else if (param.equals("rx2")) {
-      button2.pressed = KP_SHORT;
-    }
-    else if (param.equals("scan2")) {
-      button2.pressed = KP_DOUBLE;
-    }
-    else if (param.equals("spec2")) {
-      button2.pressed = KP_MID;
-    }
-    else if (param.equals("wifi2")) {
-      button2.pressed = KP_LONG;
+    if (kp >= 0) {
+      Button *b = (kp < 4) ? &button1 : &button2;
+      b->pressed = (KeyPress)(KP_SHORT + (kp & 3));   // KP_SHORT/DOUBLE/MID/LONG
+      uint8_t act = disp.layout ? disp.layout->actions[kp + 1] : ACT_NONE;
+      if (actionChangesScreen(act)) screenChanged = true;
     }
     else if (param.equals("rinex")) {
       button2.pressed = KP_RINEX;
@@ -1280,7 +1322,7 @@ const char *handleControlPost(AsyncWebServerRequest * request, int authLevel) {
       ESP.restart();
     }
   }
-  return "";
+  return screenChanged;
 }
 
 void handleUpload(AsyncWebServerRequest * request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -1793,12 +1835,13 @@ void SetupAsyncServer() {
 
   server.on("/control.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
     if(!isAuthenticated(request, 1)) return;   // level 1 may view and use the control tab
-    request->send(200, "text/html", createControlForm(reqAuthLevel(request)));
+    request->send(200, "text/html", createControlForm(reqAuthLevel(request), false));
   });
   server.on("/control.html", HTTP_POST, [](AsyncWebServerRequest * request) {
     if(!isAuthenticated(request, 1)) return;   // control actions (rx/scan/spectrum/...) allowed at level 1
-    handleControlPost(request, reqAuthLevel(request));
-    request->send(200, "text/html", createControlForm(reqAuthLevel(request)));
+    int lvl = reqAuthLevel(request);
+    bool screenChanged = handleControlPost(request, lvl);
+    request->send(200, "text/html", createControlForm(lvl, screenChanged));
   });
 
   server.on("/login.html", HTTP_GET, [](AsyncWebServerRequest * request) {

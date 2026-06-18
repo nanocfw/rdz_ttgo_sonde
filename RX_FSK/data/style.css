@@ -839,3 +839,12 @@ h1{
 /* Destructive actions stand out in red */
 .content .ctlbtn[name="format"], .content .ctlbtn[name="reboot"] { background-color: #CC1111; }
 .content .ctlbtn[name="format"]:hover, .content .ctlbtn[name="reboot"]:hover { background-color: #b30f0f; }
+/* Keypresses with no function on the current screen are greyed out and non-clickable */
+.content .ctlbtn:disabled,
+.content .ctlbtn:disabled:hover {
+  background-color: #6c757d;
+  color: #cfd3d6;
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.6;
+}
