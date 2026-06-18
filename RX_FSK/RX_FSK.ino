@@ -1209,12 +1209,16 @@ const char *ctrllabel[] = {"Receiver/next freq. (short keypress)", "Scanner (dou
 			   "Reboot"
                           };
 
-const char *createControlForm() {
+const char *createControlForm(int authLevel) {
   char *ptr = message;
   HTMLHEAD_V(ptr);
   strcat(ptr, "</head>");
   HTMLBODY(ptr, "control.html");
   for (int i = 0; i < sizeof(ctrllabel)/sizeof((ctrllabel)[0]); i++) {
+#if FEATURE_SDCARD
+    // Formatting the SD card is destructive: only offer it to admin (level 2) users.
+    if (strcmp(ctrlid[i], "format") == 0 && authLevel < 2) continue;
+#endif
     strcat(ptr, "<input class=\"ctlbtn\" type=\"submit\" name=\"");
     strcat(ptr, ctrlid[i]);
     strcat(ptr, "\" value=\"");
@@ -1234,7 +1238,7 @@ const char *createControlForm() {
 }
 
 
-const char *handleControlPost(AsyncWebServerRequest * request) {
+const char *handleControlPost(AsyncWebServerRequest * request, int authLevel) {
   LOG_D(TAG, "Handling control post request");
   int params = request->params();
   for (int i = 0; i < params; i++) {
@@ -1268,7 +1272,9 @@ const char *handleControlPost(AsyncWebServerRequest * request) {
       button2.pressed = KP_RINEX;
     }
     else if (param.equals("format")) {
-      button2.pressed = KP_FORMAT;
+      // Formatting the SD card is destructive: only admin (level 2) users may trigger it.
+      if (authLevel >= 2) button2.pressed = KP_FORMAT;
+      else LOG_W(TAG, "Rejected SD format request: insufficient auth level (%d)\n", authLevel);
     }
     else if (param.equals("reboot")) {
       ESP.restart();
@@ -1787,12 +1793,12 @@ void SetupAsyncServer() {
 
   server.on("/control.html", HTTP_GET,  [](AsyncWebServerRequest * request) {
     if(!isAuthenticated(request, 1)) return;   // level 1 may view and use the control tab
-    request->send(200, "text/html", createControlForm());
+    request->send(200, "text/html", createControlForm(reqAuthLevel(request)));
   });
   server.on("/control.html", HTTP_POST, [](AsyncWebServerRequest * request) {
     if(!isAuthenticated(request, 1)) return;   // control actions (rx/scan/spectrum/...) allowed at level 1
-    handleControlPost(request);
-    request->send(200, "text/html", createControlForm());
+    handleControlPost(request, reqAuthLevel(request));
+    request->send(200, "text/html", createControlForm(reqAuthLevel(request)));
   });
 
   server.on("/login.html", HTTP_GET, [](AsyncWebServerRequest * request) {
