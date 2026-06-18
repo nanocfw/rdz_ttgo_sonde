@@ -109,12 +109,16 @@ function draw() {
   ctx.fillText('Power (dBm)', 0, 0);
   ctx.restore();
 
-  // threshold (gray dotted)
+  // threshold (gray dotted), labeled on the right to keep it clear of the
+  // noise-floor label on the left
   let med = median(data), mx = dmax;
   let thr = med + THR_MARGIN * (mx - med);
   ctx.strokeStyle = '#888'; ctx.setLineDash([4, 4]);
   ctx.beginPath(); ctx.moveTo(ML, yFor(thr)); ctx.lineTo(W - MR, yFor(thr)); ctx.stroke();
   ctx.setLineDash([]);
+  ctx.fillStyle = '#888'; ctx.font = '11px sans-serif';
+  ctx.textBaseline = 'bottom'; ctx.textAlign = 'right';
+  ctx.fillText('signal threshold ' + thr.toFixed(0) + ' dBm', W - MR - 4, yFor(thr) - 2);
 
   // configured noise floor (orange dashed), labeled to tell it from the threshold
   if (nf !== null) {
