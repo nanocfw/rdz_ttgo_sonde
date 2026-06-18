@@ -131,8 +131,10 @@ function draw() {
     ctx.fillText('noise floor ' + nf + ' dBm', ML + 4, y - 2);
   }
 
-  // trace
-  ctx.strokeStyle = '#3a7bd5'; ctx.lineWidth = 1;
+  // trace — 1.5px so steep (near-vertical) segments don't anti-alias to a
+  // paler blue than the flatter runs; round joins keep the peaks clean
+  ctx.strokeStyle = '#3a7bd5'; ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.beginPath();
   for (let i = 0; i < n; i++) {
     let x = xFor(i), y = yFor(data[i]);
