@@ -882,10 +882,17 @@ const char *createLiveJson() {
   return message;
 }
 
+// Timestamp (millis) of the last /spectrum.json poll. The scan-plot page polls
+// every few seconds while open, so a recent value means a browser is watching.
+// Written here (web task), read by maybeScanPlotSweep() (RX task); a 32-bit
+// aligned load/store is atomic on ESP32, so no lock is needed.
+volatile unsigned long lastSpectrumPollMs = 0;
+
 const char *createSpectrumJson() {
   // Reads scandisp[]/peakf lock-free from the web task while the RX task may be
   // sweeping; mirrors createLiveJson(). Display-only data, so a momentarily mixed
   // row is harmless; seq lets the client detect/ignore an in-progress sweep.
+  lastSpectrumPollMs = millis();
   char *ptr = message;
   SondeInfo *s = &sonde.sondeList[sonde.currentSonde];
   int n = scanner.dispW();
@@ -2245,11 +2252,19 @@ const char *getStateStr(int what) {
 // Web scan plot: when idle (no sonde locked) and the configured interval has
 // elapsed, run one data-only spectrum sweep, then restore decode tuning.
 static unsigned long lastScanPlotMillis = 0;
+// A watcher is considered present if /spectrum.json was polled within this
+// window. Must exceed the page's poll interval (POLL_MS=3000 in scanplot.html)
+// with margin so a single missed/slow poll doesn't drop the watcher.
+static const unsigned long SCANPLOT_WATCH_MS = 10000;
 static void maybeScanPlotSweep() {
   if (sonde.config.scanplotint <= 0) return;          // feature disabled
   SondeInfo *si = &sonde.sondeList[sonde.currentSonde];
   if (si->lastState == 1) return;                     // locked onto a sonde -> never sweep
   unsigned long now = millis();
+  // Only sweep while a browser is actually viewing the scan plot (it polls
+  // /spectrum.json every few seconds). With nobody watching, skip the sweep
+  // entirely so the radio stays fully available to the sonde search.
+  if (lastSpectrumPollMs == 0 || (now - lastSpectrumPollMs) > SCANPLOT_WATCH_MS) return;
   unsigned long interval = (unsigned long)sonde.config.scanplotint * 1000UL;
   if (lastScanPlotMillis != 0 && (now - lastScanPlotMillis) < interval) return;
   lastScanPlotMillis = now;
