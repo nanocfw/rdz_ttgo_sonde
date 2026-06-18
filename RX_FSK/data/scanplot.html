@@ -67,8 +67,13 @@ function draw() {
   const ML = 48, MR = 12, MT = 12, MB = 24;        // margins
   let pw = W - ML - MR, ph = H - MT - MB;
 
-  // y range from data, padded to a 5 dB grid
+  // configured noise floor (dBm); drawn as a reference line if present
+  let nf = (typeof j.noisefloor === 'number') ? j.noisefloor : null;
+
+  // y range from data (and the noise floor, so its line stays on-plot),
+  // padded to a 5 dB grid
   let dmin = Math.min(...data), dmax = Math.max(...data);
+  if (nf !== null) { dmin = Math.min(dmin, nf); dmax = Math.max(dmax, nf); }
   let ymin = Math.floor((dmin - 2) / 5) * 5;
   let ymax = Math.ceil((dmax + 2) / 5) * 5;
   if (ymax <= ymin) ymax = ymin + 5;
@@ -104,12 +109,23 @@ function draw() {
   ctx.fillText('Power (dBm)', 0, 0);
   ctx.restore();
 
-  // threshold (dotted)
+  // threshold (gray dotted)
   let med = median(data), mx = dmax;
   let thr = med + THR_MARGIN * (mx - med);
   ctx.strokeStyle = '#888'; ctx.setLineDash([4, 4]);
   ctx.beginPath(); ctx.moveTo(ML, yFor(thr)); ctx.lineTo(W - MR, yFor(thr)); ctx.stroke();
   ctx.setLineDash([]);
+
+  // configured noise floor (orange dashed), labeled to tell it from the threshold
+  if (nf !== null) {
+    let y = yFor(nf);
+    ctx.strokeStyle = '#e8923a'; ctx.setLineDash([6, 3]);
+    ctx.beginPath(); ctx.moveTo(ML, y); ctx.lineTo(W - MR, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#e8923a'; ctx.font = '11px sans-serif';
+    ctx.textBaseline = 'bottom'; ctx.textAlign = 'left';
+    ctx.fillText('noise floor ' + nf + ' dBm', ML + 4, y - 2);
+  }
 
   // trace
   ctx.strokeStyle = '#3a7bd5'; ctx.lineWidth = 1;
