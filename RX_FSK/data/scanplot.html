@@ -94,7 +94,13 @@ function draw() {
   if (nf !== null) { dmin = Math.min(dmin, nf); dmax = Math.max(dmax, nf); }
   let ymin = Math.floor((dmin - 2) / 5) * 5;
   let ymax = Math.ceil((dmax + 2) / 5) * 5;
-  if (ymax <= ymin) ymax = ymin + 5;
+  // guarantee at least 4 labels (>= 3 grid intervals of 5 dB) by expanding the
+  // range outward — top (signal side) first — when the visible data spans too
+  // little, so we add headroom above rather than dead space below the noise floor
+  while ((ymax - ymin) < 15) {
+    ymax += 5;
+    if ((ymax - ymin) < 15) ymin -= 5;
+  }
   let yFor = v => MT + (1 - (v - ymin) / (ymax - ymin)) * ph;
 
   ctx.clearRect(0, 0, W, H);
