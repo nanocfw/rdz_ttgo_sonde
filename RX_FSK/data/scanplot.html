@@ -129,15 +129,25 @@ function draw() {
   };
 }
 
+// extract client coords from either a mouse event or a touch event, so the
+// crosshair works the same whether driven by hover (desktop) or a finger drag
+// (mobile, which dispatches no hover events)
+function pointFrom(ev) {
+  if (ev.touches && ev.touches.length) return ev.touches[0];
+  if (ev.changedTouches && ev.changedTouches.length) return ev.changedTouches[0];
+  return ev;
+}
+
 // draw a vertical/horizontal crosshair through the data point nearest the
-// cursor, with a label showing the exact frequency and power at that point
+// cursor/finger, with a label showing the exact frequency and power at that point
 function drawCrosshair(ev) {
   if (!plot) return;
   let p = plot;
+  let pt = pointFrom(ev);
   let rect = cv.getBoundingClientRect();
   // map the client coords to CSS pixels of the canvas backing store
-  let mx = (ev.clientX - rect.left) * (cv.clientWidth / rect.width);
-  let my = (ev.clientY - rect.top) * (cv.clientHeight / rect.height);
+  let mx = (pt.clientX - rect.left) * (cv.clientWidth / rect.width);
+  let my = (pt.clientY - rect.top) * (cv.clientHeight / rect.height);
 
   ctx.putImageData(p.snapshot, 0, 0);   // restore the clean plot
 
@@ -216,6 +226,15 @@ async function poll() {
 window.addEventListener('resize', draw);
 cv.addEventListener('mousemove', drawCrosshair);
 cv.addEventListener('mouseleave', () => { if (plot) ctx.putImageData(plot.snapshot, 0, 0); });
+// touch: track on tap and drag (left/right), keeping the readout visible after
+// the finger lifts. preventDefault stops the page from scrolling while tracking.
+function onTouch(ev) {
+  if (!plot) return;
+  ev.preventDefault();
+  drawCrosshair(ev);
+}
+cv.addEventListener('touchstart', onTouch, { passive: false });
+cv.addEventListener('touchmove', onTouch, { passive: false });
 poll();
 </script>
 </body>
