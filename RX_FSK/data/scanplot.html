@@ -39,7 +39,7 @@ const POLL_MS = 3000;      // how often to poll for a fresh scan
 const THR_MARGIN = 0.15;   // noise-reference line = median + THR_MARGIN*(max-median)
 let lastSeq = -1;
 let cv = document.getElementById('plot');
-let ctx = cv.getContext('2d');
+let ctx = cv.getContext('2d', { willReadFrequently: true });
 let info = document.getElementById('info');
 let banner = document.getElementById('banner');
 let stamp = document.getElementById('stamp');
