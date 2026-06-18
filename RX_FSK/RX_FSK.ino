@@ -2265,8 +2265,13 @@ static void maybeScanPlotSweep() {
   // /spectrum.json every few seconds). With nobody watching, skip the sweep
   // entirely so the radio stays fully available to the sonde search.
   if (lastSpectrumPollMs == 0 || (now - lastSpectrumPollMs) > SCANPLOT_WATCH_MS) return;
-  unsigned long interval = (unsigned long)sonde.config.scanplotint * 1000UL;
-  if (lastScanPlotMillis != 0 && (now - lastScanPlotMillis) < interval) return;
+  // A watcher is present. If no scan exists in memory yet (seq still 0), sweep
+  // immediately so the page gets a plot without waiting; otherwise throttle to
+  // the configured interval.
+  if (scanner.webSeq() != 0) {
+    unsigned long interval = (unsigned long)sonde.config.scanplotint * 1000UL;
+    if ((now - lastScanPlotMillis) < interval) return;
+  }
   lastScanPlotMillis = now;
   LOG_I(TAG, "ScanPlot: idle sweep\n");
   scanner.scanForWeb();                               // data-only sweep, bumps seq
