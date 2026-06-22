@@ -311,6 +311,12 @@ typedef struct st_rdzconfig {
 	int norx_timeout;		// Time after which rx mode switches to scan mode (without rx signal)
 	int noisefloor;			// for spectrum display
 	int scanplotint;		// web scan-plot idle-sweep interval in seconds (0=disable)
+	// Spectrum-sweep per-bin RSSI dwell overrides (affect both the spectrum view
+	// and auto-scan; -1 = use the per-display default). Longer dwell = steadier
+	// RSSI / better weak-peak detection, slower sweep. Plot geometry is unaffected.
+	int scan_smooth;        // SX1278 RSSI averaging exponent 0..7 (samples = 2^(n+1)); -1 = default
+	int scan_addwait;       // extra per-bin settle time in microseconds; -1 = default
+	int scan_iter;          // number of full sweeps per scan (max RSSI kept); 1..20, default 3
 	// Auto-scan (peak detection) settings. When autoscan_enable is set, the
 	// firmware ignores the configured channel list and instead sweeps the
 	// spectrum, finds peaks above the noise floor and trial-decodes each one,
@@ -320,7 +326,8 @@ typedef struct st_rdzconfig {
 	int autoscan_mindist;   // min distance between detected peaks (Hz)
 	int autoscan_quant;     // quantize detected peaks to this step (Hz; sondes use 10 kHz)
 	int autoscan_maxpeaks;  // max peaks to trial-decode per sweep
-	int autoscan_dwell;     // per-peak detection budget (s), split across enabled sonde types
+	int autoscan_dwell;     // per-peak detection budget (s); per-type = this/N_types unless typedwell set
+	int autoscan_typedwell; // fixed decode time per sonde type (ms); 0 = derive from autoscan_dwell
 	int autoscan_rxtimeout; // after this many s with no valid frame on a locked sonde, re-scan
 	int allowfileupload;		// allow firmware/filesystem upload from the update page (0=disable). Hidden: not in cfg.js
 	char mdnsname[15];		// mDNS-Name, defaults to rdzsonde

@@ -996,6 +996,9 @@ struct st_configitems config_list[] = {
   {"marker", 0, &sonde.config.marker},
   {"noisefloor", 0, &sonde.config.noisefloor},
   {"scanplotint", 0, &sonde.config.scanplotint},
+  {"scan_smooth", 0, &sonde.config.scan_smooth},
+  {"scan_addwait", 0, &sonde.config.scan_addwait},
+  {"scan_iter", 0, &sonde.config.scan_iter},
   /* Auto-scan (peak detection) settings; used when autoscan_enable=1 */
   {"autoscan_enable", 0, &sonde.config.autoscan_enable},
   {"autoscan_snr", 0, &sonde.config.autoscan_snr},
@@ -1003,6 +1006,7 @@ struct st_configitems config_list[] = {
   {"autoscan_quant", 0, &sonde.config.autoscan_quant},
   {"autoscan_maxpeaks", 0, &sonde.config.autoscan_maxpeaks},
   {"autoscan_dwell", 0, &sonde.config.autoscan_dwell},
+  {"autoscan_typedwell", 0, &sonde.config.autoscan_typedwell},
   {"autoscan_rxtimeout", 0, &sonde.config.autoscan_rxtimeout},
   {"allowfileupload", 0, &sonde.config.allowfileupload},
   /* decoder settings */
@@ -3322,9 +3326,12 @@ void loopAutoScan() {
     return;
   }
 
-  // Per-type dwell = auto_rx's per-peak budget split across the enabled types,
-  // floored at ~one frame period so a present sonde can actually be caught.
-  unsigned long perType = (unsigned long)sonde.config.autoscan_dwell * 1000UL / AUTOSCAN_NTYPES;
+  // Per-type dwell: a fixed time per sonde type (autoscan_typedwell, ms) if set,
+  // otherwise auto_rx's per-peak budget (autoscan_dwell, s) split across the
+  // enabled types. Floored at ~one frame period so a present sonde can be caught.
+  unsigned long perType = (sonde.config.autoscan_typedwell > 0)
+      ? (unsigned long)sonde.config.autoscan_typedwell
+      : (unsigned long)sonde.config.autoscan_dwell * 1000UL / AUTOSCAN_NTYPES;
   if (perType < 1000UL) perType = 1000UL;
 
   if (!asTrialSetup) {

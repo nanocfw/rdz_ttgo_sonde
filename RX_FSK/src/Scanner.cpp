@@ -158,7 +158,14 @@ void Scanner::scan()
 	} else {
 		scanconfig = scan934x;
 	}
-	// Configure 
+	// Optional per-bin dwell override (config). Only the RSSI timing is changed;
+	// the plot geometry (PLOT_W/CHANSTEP/SMPL_PIX) stays from the display profile,
+	// so the on-device scan plot keeps rendering unchanged. A longer dwell gives
+	// steadier RSSI / better weak-peak detection at the cost of a slower sweep.
+	// -1 = keep the display default.
+	if(sonde.config.scan_smooth >= 0) scanconfig.SMOOTH = sonde.config.scan_smooth & 0x07;
+	if(sonde.config.scan_addwait >= 0) scanconfig.ADDWAIT = sonde.config.scan_addwait;
+	// Configure
  	STARTF = (sonde.config.startfreq * 1000000);
 	sx1278.writeRegister(REG_PLL_HOP, 0x80);   // FastHopOn
 	sx1278.setRxBandwidth((int)(scanconfig.CHANSTEP*1000));
@@ -174,7 +181,12 @@ void Scanner::scan()
 	float freq = STARTF;
 	int wait = scanconfig.ADDWAIT + 20 + 1000*(1<<(scanconfig.SMOOTH+1))/4/(0.001*CHANBW);
 	Serial.print("wait time (us) is: "); Serial.println(wait);
-	for(int iter=0; iter<3; iter++) {   // three interations, to catch all RS41 transmissions
+	// Number of full sweeps; the max RSSI per bin is kept across them. More passes
+	// spread the per-bin revisits over more wall-clock time, so a periodic signal
+	// (e.g. RS41, ~1 frame/s) is caught even when it is off during some passes.
+	int niter = sonde.config.scan_iter;
+	if(niter < 1) niter = 1; else if(niter > 20) niter = 20;
+	for(int iter=0; iter<niter; iter++) {   // multiple iterations, to catch all RS41 transmissions
 	    delayMicroseconds(20000); yield();
 	    for(int i=0; i<scanconfig.PLOT_W*scanconfig.SMPL_PIX; i++) {
 		freq = STARTF + 1000.0*i*scanconfig.CHANSTEP;

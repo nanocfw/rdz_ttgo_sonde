@@ -375,13 +375,17 @@ void Sonde::defaultConfig() {
 	config.display[2]=-1;
 	config.startfreq=400;
 	config.scanplotint=60;
+	config.scan_smooth=-1;          // use per-display default
+	config.scan_addwait=-1;         // use per-display default
+	config.scan_iter=3;             // full sweeps per scan (max RSSI kept)
 	// Auto-scan defaults (mirror radiosonde_auto_rx's scanner where applicable)
 	config.autoscan_enable=0;       // off: use the configured channel list
 	config.autoscan_snr=10;         // dB above noise floor
 	config.autoscan_mindist=1000;   // Hz
 	config.autoscan_quant=10000;    // Hz (10 kHz channel steps)
 	config.autoscan_maxpeaks=10;    // peaks per sweep
-	config.autoscan_dwell=5;        // s per peak, split across enabled types
+	config.autoscan_dwell=12;       // s per peak (~2.4 s/type with 5 types; enough for RS41)
+	config.autoscan_typedwell=0;    // 0 = derive per-type time from autoscan_dwell
 	config.autoscan_rxtimeout=180;  // s
 	config.allowfileupload=0;
 	config.channelbw=10;
