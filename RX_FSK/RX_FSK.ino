@@ -1280,6 +1280,16 @@ static bool actionChangesScreen(uint8_t act) {
 const char *createControlForm(int authLevel, bool reloadAfter) {
   char *ptr = message;
   HTMLHEAD_V(ptr);
+  // confirmSubmit() guards the destructive/disruptive control buttons (Format SD, Reboot) with
+  // the project's styled confirmation. It cancels the immediate submit, shows showConfirm(), and
+  // -- only on accept -- re-submits the form with a hidden field carrying the button's name (a
+  // programmatic submit() would otherwise drop the clicked submit button's name/value).
+  strcat(ptr, "<script src=\"dialog.js?v=");
+  strcat(ptr, version_id);
+  strcat(ptr, "\"></script><script>function confirmSubmit(b,msg){"
+              "showConfirm(msg).then(function(ok){if(!ok)return;"
+              "var h=document.createElement('input');h.type='hidden';h.name=b.name;h.value=b.value;"
+              "b.form.appendChild(h);b.form.submit();});return false;}</script>");
   strcat(ptr, "</head>");
   HTMLBODY(ptr, "control.html");
   if (reloadAfter) {
@@ -1313,7 +1323,15 @@ const char *createControlForm(int authLevel, bool reloadAfter) {
     strcat(ptr, ctrlid[i]);
     strcat(ptr, "\" value=\"");
     strcat(ptr, label);
-    strcat(ptr, disabled ? "\" disabled></input>" : "\"></input>");
+    strcat(ptr, "\"");                        // close the value attribute
+    // Destructive/disruptive actions get a styled confirmation before the form submits.
+#if FEATURE_SDCARD
+    if (strcmp(ctrlid[i], "format") == 0)
+      strcat(ptr, " onclick=\"return confirmSubmit(this,'Format the SD card?\\nThis permanently erases all data on the card.');\"");
+#endif
+    if (strcmp(ctrlid[i], "reboot") == 0)
+      strcat(ptr, " onclick=\"return confirmSubmit(this,'Reboot the device now?');\"");
+    strcat(ptr, disabled ? " disabled></input>" : "></input>");
     if (i == 3 || i == 7 ) {
       strcat(ptr, "<p></p>");
     }
