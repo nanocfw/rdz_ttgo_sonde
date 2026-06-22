@@ -39,9 +39,11 @@
     .filebtn { background: #f0f0f0; border: 1px solid #c9c9c9; border-radius: 5px;
                padding: 6px 14px; font-size: 13px; color: #333; white-space: nowrap; }
     .filepick:hover .filebtn { background: #e6e6e6; }
-    .filename { font-size: 13px; color: #999; overflow-wrap: anywhere; }
+    /* Fixed-width name column so every .filepick is the same width and the "Choose file"
+       buttons line up across rows (the button sits left of this variable-length name). */
+    .filename { font-size: 13px; color: #999; overflow-wrap: anywhere; flex: 0 0 12em; }
     .filepick.has-file .filename { color: #333; }
-    .filepick.bad-name .filename { color: #c47f00; }   /* name differs from the expected one */
+    .filepick.bad-name .filename { color: #c00; }   /* name differs from the expected one */
     .updbtn[type="submit"] { margin-top: 14px; }
   </style>
 </head>
@@ -266,7 +268,7 @@ function startFileUpload(form) {
 }
 
 // Reflect the chosen file's name in the styled picker. accept="" only filters by
-// extension, so flag (amber) a name that differs from the expected one — but still
+// extension, so flag (red) a name that differs from the expected one — but still
 // allow it, since the firmware detects firmware-vs-filesystem by content anyway.
 function refreshPick(inp) {
   const pick = inp.closest(".filepick");
