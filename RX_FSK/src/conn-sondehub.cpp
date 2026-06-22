@@ -742,7 +742,7 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
         }
         uint32_t fw;
         if (RS41::getMainboardFW(&fw, s) == 0) {
-            snprintf(w, SH_REMAIN, "\"rs41_mainboard_fw\": %u,", fw);
+            snprintf(w, SH_REMAIN, "\"rs41_mainboard_fw\": \"%u\",", fw);
             w += strlen(w);
         }
     }
