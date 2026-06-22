@@ -20,11 +20,34 @@
         #loginForm label { display: inline-block; min-width: 6em; }
     </style>
     <script>
-        // If loaded inside a tab iframe (e.g. after an auth redirect), take over the full window
-        if (window.top !== window.self) { window.top.location.href = "/login.html"; }
+        // If loaded inside a tab iframe (e.g. after an auth redirect from a tab's content),
+        // take over the full window. Carry the parent page + selected tab (its path + #hash)
+        // along as ?next= so a successful login returns there -- this preserves the open tab,
+        // which the server never sees (the #hash is never sent in the HTTP request).
+        if (window.top !== window.self) {
+            var dest = "/login.html";
+            try {
+                var t = window.top.location;
+                dest += "?next=" + encodeURIComponent(t.pathname + t.search + t.hash);
+            } catch (e) { /* cross-origin (shouldn't happen on-device); fall back to bare login */ }
+            window.top.location.href = dest;
+        }
     </script>
     <script src="dialog.js?v=%VERSION_ID%" type="text/javascript"></script>
     <script>
+        // Validate a return target: must be a local path on this device. Rejects absolute URLs
+        // (open-redirect protection) and the login/logout endpoints (which would loop). An
+        // optional #tab hash is allowed. Returns the safe path, or null to fall back to home.
+        function safeNext(n) {
+            if (!n || n[0] !== '/' || n[1] === '/') return null;   // must be local, not "//host"
+            if (n.indexOf('://') !== -1 || n.indexOf('\\') !== -1) return null;
+            if (n.indexOf('/login.html') === 0 || n.indexOf('/logout') === 0) return null;
+            return n;
+        }
+        function afterLogin() {
+            const next = safeNext(new URLSearchParams(window.location.search).get('next'));
+            window.location.href = next || '/index.html';
+        }
         function doLogin(event) {
             event.preventDefault(); // Prevent form's default submission behavior
             const username = document.getElementById('user').value;
@@ -36,7 +59,7 @@
             const body = new URLSearchParams({ user: username, password: password });
             fetch('/login.html', { method: 'POST', body: body, credentials: 'same-origin' })
                 .then(resp => {
-                    if (resp.ok) { window.location.href = '/index.html'; return; }
+                    if (resp.ok) { afterLogin(); return; }
                     return resp.text().then(msg => showAlert(msg || 'Login failed'));
                 })
                 .catch(() => { showAlert('Login failed (network error)'); });

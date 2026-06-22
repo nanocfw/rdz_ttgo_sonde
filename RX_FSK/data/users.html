@@ -174,7 +174,10 @@ document.getElementById('addForm').addEventListener('submit', function(e) {
         // The device just locked down user management; the operator must now authenticate.
         showAlert('Account "' + u + '" created as administrator.\n\n' +
                   'User management now requires logging in. You will be redirected to the login page.')
-          .then(function() { window.top.location.href = '/login.html'; });
+          .then(function() {
+            var back = window.top.location.pathname + window.top.location.hash;
+            window.top.location.href = '/login.html?next=' + encodeURIComponent(back);
+          });
         return;
       }
       document.getElementById('msg').textContent = 'Saved.';

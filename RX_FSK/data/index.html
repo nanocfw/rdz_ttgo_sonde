@@ -231,9 +231,13 @@ function jwtUser(jwt) {
     document.addEventListener("keydown", function(e) { if (e.key === "Escape") closeMenu(); });
   } else {
     // Not logged in: no menu needed, the button is a direct link to the login page.
+    // Carry the current page + open tab (#hash) so login returns here afterwards.
     name.textContent = "Login";
     menu.classList.add("usermenu-guest");
-    btn.addEventListener("click", function() { window.location.href = "/login.html"; });
+    btn.addEventListener("click", function() {
+      var here = window.location.pathname + window.location.hash;
+      window.location.href = "/login.html?next=" + encodeURIComponent(here);
+    });
   }
 })();
 

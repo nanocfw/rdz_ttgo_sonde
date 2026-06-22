@@ -1678,9 +1678,22 @@ bool isAuthenticated(AsyncWebServerRequest *request, int level) {
       return 1;
     }
   }
-  // Not authenticated: send the user to the login page instead of a bare 401 text response
+  // Not authenticated: send the user to the login page instead of a bare 401 text response.
+  // Remember where they were headed as ?next= so login.html can return them there afterwards.
+  // request->url() is the URL-decoded path only (query already stripped). Only carry simple,
+  // safe local paths; login.html validates again, and anything unusual falls back to /index.html.
   AsyncWebServerResponse *response = request->beginResponse(302);
-  response->addHeader("Location", "/login.html");
+  String loc = "/login.html";
+  String url = request->url();
+  bool safe = url.length() > 1 && url[0] == '/' && url != "/login.html";
+  for(unsigned int i = 0; safe && i < url.length(); i++) {
+    char c = url[i];
+    bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+              c == '/' || c == '.' || c == '-' || c == '_';
+    if(!ok) safe = false;
+  }
+  if(safe) loc += "?next=" + url;
+  response->addHeader("Location", loc);
   request->send(response);
   return false;
 }
