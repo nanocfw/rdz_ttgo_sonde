@@ -375,6 +375,14 @@ void Sonde::defaultConfig() {
 	config.display[2]=-1;
 	config.startfreq=400;
 	config.scanplotint=60;
+	// Auto-scan defaults (mirror radiosonde_auto_rx's scanner where applicable)
+	config.autoscan_enable=0;       // off: use the configured channel list
+	config.autoscan_snr=10;         // dB above noise floor
+	config.autoscan_mindist=1000;   // Hz
+	config.autoscan_quant=10000;    // Hz (10 kHz channel steps)
+	config.autoscan_maxpeaks=10;    // peaks per sweep
+	config.autoscan_dwell=5;        // s per peak, split across enabled types
+	config.autoscan_rxtimeout=180;  // s
 	config.allowfileupload=0;
 	config.channelbw=10;
 	config.marker=0;
@@ -694,6 +702,34 @@ void Sonde::receive() {
 	res = (action<<8) | (res&0xff);
 	// let waitRXcomplete resume...
 	rxtask.receiveResult = res;
+}
+
+// Tune+decode one frame for the current entry, no event/timeout/display handling.
+// Caller must have set rxtask.currentSonde / sondeList[...] and called setup().
+uint16_t Sonde::rxRawFrame() {
+	uint16_t res = RX_TIMEOUT;
+	switch(sondeList[rxtask.currentSonde].type) {
+	case STYPE_RS41:
+		res = rs41.receive();
+		break;
+	case STYPE_RS92:
+#if FEATURE_RS92
+		res = rs92.receive();
+#endif
+		break;
+	case STYPE_M10:
+	case STYPE_M20:
+	case STYPE_M10M20:
+		res = m10m20.receive();
+		break;
+	case STYPE_DFM:
+		res = dfm.receive();
+		break;
+	case STYPE_MP3H:
+		res = mp3h.receive();
+		break;
+	}
+	return res;
 }
 
 // return (action<<8) | (rxresult)

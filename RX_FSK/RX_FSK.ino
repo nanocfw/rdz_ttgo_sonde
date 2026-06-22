@@ -90,9 +90,9 @@ NULL };
 //#define ESP_MEM_DEBUG 1
 //int e;
 
-enum MainState { ST_DECODER, ST_SPECTRUM, ST_WIFISCAN, ST_UPDATE, ST_TOUCHCALIB, ST_RINEX_UPDATE, ST_FORMAT_SD };
+enum MainState { ST_DECODER, ST_SPECTRUM, ST_WIFISCAN, ST_UPDATE, ST_TOUCHCALIB, ST_RINEX_UPDATE, ST_FORMAT_SD, ST_AUTOSCAN };
 static MainState mainState = ST_WIFISCAN;
-const char *mainStateStr[] = {"DECODER", "SPECTRUM", "WIFISCAN", "UPDATE", "TOUCHCALIB", "RINEXUPDATE", "FORMATSD" };
+const char *mainStateStr[] = {"DECODER", "SPECTRUM", "WIFISCAN", "UPDATE", "TOUCHCALIB", "RINEXUPDATE", "FORMATSD", "AUTOSCAN" };
 
 AsyncWebServer server(80);
 
@@ -173,7 +173,20 @@ static int currentDisplay = 1;
 // timestamp when spectrum display was activated
 static unsigned long specTimer;
 
-void enterMode(int mode);
+void enterMode(int mode, bool force = false);
+void loopAutoScan();
+static void autoscanReset();
+// Auto-scan is on when configured; it then ignores the channel list entirely.
+static inline bool autoscanActive() { return sonde.config.autoscan_enable != 0; }
+// Scratch channel slot used by auto-scan for trial/locked decoding, chosen past
+// the configured channels so the user's qrg.txt list is never overwritten in RAM.
+// (sondeList is allocated with MAXSONDE+1 entries; setup() requires index < maxsonde.)
+static inline int autoscanSlot() {
+  int s = sonde.nSonde;
+  if (s >= sonde.config.maxsonde) s = sonde.config.maxsonde - 1;
+  if (s < 0) s = 0;
+  return s;
+}
 void WiFiEvent(WiFiEvent_t event);
 
 
@@ -888,6 +901,17 @@ const char *createLiveJson() {
 // aligned load/store is atomic on ESP32, so no lock is needed.
 volatile unsigned long lastSpectrumPollMs = 0;
 
+// Auto-scan status snapshot for the web scan-plot. Written by loopAutoScan() in the
+// main loop, read by createSpectrumJson() in the web task. Display-only, so the
+// occasional mixed read is harmless (same lock-free convention as scandisp[]).
+#define AUTOSCAN_MAXPK 16
+volatile int autoscanWebState = 0;        // 0=sweeping, 1=trial-decoding
+volatile float autoscanWebTryFreq = 0;    // MHz currently being trial-decoded
+volatile int autoscanWebTryType = -1;     // SondeType being tried (-1=none)
+volatile int autoscanWebNpeaks = 0;       // peaks found in the last sweep
+float autoscanWebPeakF[AUTOSCAN_MAXPK];   // detected peak frequencies (MHz)
+volatile int autoscanWebPeakN = 0;        // valid entries in autoscanWebPeakF[]
+
 const char *createSpectrumJson() {
   // Reads scandisp[]/peakf lock-free from the web task while the RX task may be
   // sweeping; mirrors createLiveJson(). Display-only data, so a momentarily mixed
@@ -910,6 +934,20 @@ const char *createSpectrumJson() {
 
   if (rx) {
     ptr += sprintf(ptr, ",\"rxfreq\":%3.3f,\"rxname\":\"%s\"", s->freq, s->d.id);
+  }
+
+  // Auto-scan status (only when running in auto-scan mode)
+  if (autoscanActive()) {
+    ptr += sprintf(ptr, ",\"autoscan\":1,\"as_state\":\"%s\",\"as_npeaks\":%d",
+                   autoscanWebState ? "trial" : "sweep", autoscanWebNpeaks);
+    if (autoscanWebState && autoscanWebTryType >= 0 && autoscanWebTryType < NSondeTypes) {
+      ptr += sprintf(ptr, ",\"as_tryfreq\":%.3f,\"as_trytype\":\"%s\"",
+                     autoscanWebTryFreq, sondeTypeStr[autoscanWebTryType]);
+    }
+    ptr += sprintf(ptr, ",\"as_peaks\":[");
+    int pn = autoscanWebPeakN; if (pn > AUTOSCAN_MAXPK) pn = AUTOSCAN_MAXPK;
+    for (int i = 0; i < pn; i++) ptr += sprintf(ptr, "%s%.3f", i ? "," : "", autoscanWebPeakF[i]);
+    ptr += sprintf(ptr, "]");
   }
 
   // scandisp holds -RssiValue; RSSI[dBm] = -RssiValue/2, so emit data/2.0 as dBm
@@ -958,6 +996,14 @@ struct st_configitems config_list[] = {
   {"marker", 0, &sonde.config.marker},
   {"noisefloor", 0, &sonde.config.noisefloor},
   {"scanplotint", 0, &sonde.config.scanplotint},
+  /* Auto-scan (peak detection) settings; used when autoscan_enable=1 */
+  {"autoscan_enable", 0, &sonde.config.autoscan_enable},
+  {"autoscan_snr", 0, &sonde.config.autoscan_snr},
+  {"autoscan_mindist", 0, &sonde.config.autoscan_mindist},
+  {"autoscan_quant", 0, &sonde.config.autoscan_quant},
+  {"autoscan_maxpeaks", 0, &sonde.config.autoscan_maxpeaks},
+  {"autoscan_dwell", 0, &sonde.config.autoscan_dwell},
+  {"autoscan_rxtimeout", 0, &sonde.config.autoscan_rxtimeout},
   {"allowfileupload", 0, &sonde.config.allowfileupload},
   /* decoder settings */
   {"freqofs", 0, &sonde.config.freqofs},
@@ -2869,8 +2915,14 @@ void setup()
 #endif
 }
 
-void enterMode(int mode) {
+void enterMode(int mode, bool force) {
   LOG_D(TAG, "enterMode(%d)\n", mode);
+  // Auto-scan: when enabled, "start decoding" means "start searching the spectrum
+  // for peaks". force=true bypasses this and is used by the auto-scan loop itself
+  // to lock onto a found sonde.
+  if (mode == ST_DECODER && !force && autoscanActive()) {
+    mode = ST_AUTOSCAN;
+  }
   // Backround RX task should only be active in mode ST_DECODER for now
   // (future changes might use RX background task for spectrum display as well)
   if (mode != ST_DECODER) {
@@ -2886,6 +2938,11 @@ void enterMode(int mode) {
     disp.rdis->setFont(FONT_SMALL);
     specTimer = millis();
     //scanner.init();
+  } else if (mainState == ST_AUTOSCAN) {
+    Serial.println("Entering ST_AUTOSCAN mode");
+    sonde.clearDisplay();
+    disp.rdis->setFont(FONT_SMALL);
+    autoscanReset();
   } else if (mainState == ST_WIFISCAN || mainState == ST_RINEX_UPDATE || mainState == ST_FORMAT_SD) {
     sonde.clearDisplay();
   }
@@ -2925,6 +2982,22 @@ static char rdzData[RDZ_DATA_LEN];
 static int rdzDataPos = 0;
 
 void loopDecoder() {
+  // Auto-scan mode: we locked onto a peak-detected sonde (held in the scratch
+  // slot). Return to sweeping the spectrum if it stops decoding for
+  // autoscan_rxtimeout seconds, or if a receive timeout caused the decoder to
+  // wander off the scratch slot onto a configured channel.
+  if (autoscanActive()) {
+    int slot = autoscanSlot();
+    SondeInfo *as = &sonde.sondeList[slot];
+    bool wandered = (rxtask.currentSonde != slot);
+    bool lost = (as->lastState == 0 &&
+                 (millis() - as->norxStart) > (unsigned long)sonde.config.autoscan_rxtimeout * 1000UL);
+    if (wandered || lost) {
+      LOG_I(TAG, "AutoScan: %s, returning to scan\n", wandered ? "decoder left scratch slot" : "no data");
+      enterMode(ST_AUTOSCAN);
+      return;
+    }
+  }
   // sonde knows the current type and frequency, and delegates to the right decoder
   uint16_t res = sonde.waitRXcomplete();
   int action;
@@ -3162,6 +3235,139 @@ void startSpectrumDisplay() {
   disp.rdis->drawString(0, 0, "Spectrum Scan...");
   delay(500);
   enterMode(ST_SPECTRUM);
+}
+
+// ---------------- Auto-scan (peak detection) ----------------
+// Active when autoscan_enable is set. Runs entirely in the main
+// loop like loopSpectrum(): the RX background task is idle (mainState != ST_DECODER)
+// so the main loop owns the radio. Each pass sweeps the spectrum, trial-decodes
+// every peak through the enabled sonde types, and on a valid frame hands off to
+// the normal decoder via enterMode(ST_DECODER, true). Modeled on radiosonde_auto_rx.
+static const SondeType AUTOSCAN_TYPES[] = {
+  STYPE_RS41, STYPE_DFM, STYPE_M10M20, STYPE_MP3H,
+#if FEATURE_RS92
+  STYPE_RS92,
+#endif
+};
+#define AUTOSCAN_NTYPES ((int)(sizeof(AUTOSCAN_TYPES) / sizeof(AUTOSCAN_TYPES[0])))
+
+enum { AS_SWEEP, AS_TRIAL };
+static int asState = AS_SWEEP;
+static ScanPeak asPeaks[AUTOSCAN_MAXPK];
+static int asNpeaks = 0;
+static int asPeakIdx = 0;
+static int asTypeIdx = 0;
+static bool asTrialSetup = false;
+static unsigned long asTrialStart = 0;
+static unsigned long asNextSweep = 0;
+
+static void autoscanReset() {
+  asState = AS_SWEEP;
+  asNpeaks = 0;
+  asPeakIdx = asTypeIdx = 0;
+  asTrialSetup = false;
+  asNextSweep = 0;
+  autoscanWebState = 0;
+  autoscanWebTryType = -1;
+  autoscanWebNpeaks = 0;
+  autoscanWebPeakN = 0;
+  sonde.dispsavectlON();                             // start with the display on
+}
+
+void loopAutoScan() {
+  // Buttons: let the user escape to the WiFi/config screen or manual spectrum.
+  int key = getKeyPress();
+  if (key != KP_NONE) sonde.dispsavectlON();         // any key wakes the display
+  switch (key) {
+    case KP_LONG: enterMode(ST_WIFISCAN); return;
+    case KP_DOUBLE: enterMode(ST_SPECTRUM); return;
+    default: break;
+  }
+  // Screen saver: scanning counts as "no RX", so the display dims/clears after the
+  // configured timeout just like in decoder mode (called ~1x per pass, ~1-2 s).
+  sonde.dispsavectlOFF(0);
+  bool dispOn = (disp.dispstate != 0);
+
+  if (asState == AS_SWEEP) {
+    // Optional brief pause after a fruitless sweep so we don't spin uselessly.
+    if (asNextSweep && (long)(millis() - asNextSweep) < 0) { delay(100); return; }
+    scanner.scanForWeb();                            // sweep + bump web seq
+    if (scanner.webSeq() && dispOn) scanner.plotResult();  // show spectrum (unless saver off)
+    int maxpk = sonde.config.autoscan_maxpeaks;
+    if (maxpk > AUTOSCAN_MAXPK) maxpk = AUTOSCAN_MAXPK;
+    asNpeaks = scanner.findPeaks(asPeaks, maxpk, sonde.config.autoscan_snr,
+                                 sonde.config.autoscan_mindist, sonde.config.autoscan_quant);
+    // Publish peak list to the web scan-plot.
+    int pn = asNpeaks; if (pn > AUTOSCAN_MAXPK) pn = AUTOSCAN_MAXPK;
+    for (int i = 0; i < pn; i++) autoscanWebPeakF[i] = asPeaks[i].freqHz * 1e-6;
+    autoscanWebPeakN = pn;
+    autoscanWebNpeaks = asNpeaks;
+    LOG_I(TAG, "AutoScan: sweep found %d peaks\n", asNpeaks);
+    if (asNpeaks == 0) {
+      asNextSweep = millis() + 1000UL;               // brief delay, then re-sweep
+      autoscanWebState = 0;
+      return;
+    }
+    asPeakIdx = 0; asTypeIdx = 0; asTrialSetup = false;
+    asState = AS_TRIAL;
+    autoscanWebState = 1;
+    return;
+  }
+
+  // AS_TRIAL: walk peaks (strongest first), trying each enabled type per peak.
+  if (asPeakIdx >= asNpeaks) {
+    asState = AS_SWEEP;
+    asNextSweep = millis();                          // re-sweep immediately
+    autoscanWebState = 0;
+    return;
+  }
+
+  // Per-type dwell = auto_rx's per-peak budget split across the enabled types,
+  // floored at ~one frame period so a present sonde can actually be caught.
+  unsigned long perType = (unsigned long)sonde.config.autoscan_dwell * 1000UL / AUTOSCAN_NTYPES;
+  if (perType < 1000UL) perType = 1000UL;
+
+  if (!asTrialSetup) {
+    SondeType t = AUTOSCAN_TYPES[asTypeIdx];
+    double fMHz = asPeaks[asPeakIdx].freqHz * 1e-6;
+    int slot = autoscanSlot();                       // scratch slot past the channel list
+    SondeInfo *si = &sonde.sondeList[slot];
+    si->type = t;
+    si->freq = fMHz;
+    si->active = 1;
+    rxtask.currentSonde = slot;
+    sonde.currentSonde = slot;
+    sonde.setup();
+    asTrialStart = millis();
+    asTrialSetup = true;
+    autoscanWebTryFreq = fMHz;
+    autoscanWebTryType = t;
+    LOG_I(TAG, "AutoScan: trial %.3f MHz as %s\n", fMHz, sondeTypeStr[t]);
+    if (dispOn) {
+      char buf[40];
+      snprintf(buf, sizeof(buf), "Scan %.3f %s", fMHz, sondeTypeStr[t]);
+      disp.rdis->drawString(0, 0, buf);
+    }
+  }
+
+  uint16_t res = sonde.rxRawFrame();                 // ~1 frame window; blocks here
+  if (res == RX_OK) {
+    SondeInfo *si = &sonde.sondeList[autoscanSlot()];
+    LOG_I(TAG, "AutoScan: LOCK %.3f MHz as %s\n", si->freq, sondeTypeStr[si->type]);
+    sonde.dispsavectlON();                           // wake the display for the locked sonde
+    setCurrentDisplay(1);                            // default sonde display
+    enterMode(ST_DECODER, true);                     // hand off to the normal decoder
+    return;
+  }
+
+  if ((long)(millis() - asTrialStart) >= (long)perType) {
+    asTypeIdx++;
+    asTrialSetup = false;
+    if (asTypeIdx >= AUTOSCAN_NTYPES) {              // exhausted types -> next peak
+      asTypeIdx = 0;
+      asPeakIdx++;
+    }
+  }
 }
 
 const char *translateEncryptionType(wifi_auth_mode_t encryptionType) {
@@ -3988,6 +4194,7 @@ void loop() {
 #endif
       break;
     case ST_SPECTRUM: loopSpectrum(); break;
+    case ST_AUTOSCAN: loopAutoScan(); break;
     case ST_WIFISCAN: loopWifiScan(); break;
     case ST_UPDATE: execOTA(); break;
     case ST_TOUCHCALIB: loopTouchCalib(); break;

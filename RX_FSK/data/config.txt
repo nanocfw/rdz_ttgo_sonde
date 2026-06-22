@@ -72,6 +72,16 @@ noisefloor=-125
 marker=1
 scanplotint=60
 #-------------------------------#
+# Auto-scan (peak detection; ignores qrg.txt when enabled)
+#-------------------------------#
+autoscan_enable=0
+autoscan_snr=10
+autoscan_mindist=1000
+autoscan_quant=10000
+autoscan_maxpeaks=10
+autoscan_dwell=5
+autoscan_rxtimeout=180
+#-------------------------------#
 # APRS settings
 #-------------------------------#
 call=N0CALL

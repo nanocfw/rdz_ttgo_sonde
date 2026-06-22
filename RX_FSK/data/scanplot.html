@@ -254,7 +254,21 @@ async function poll() {
     let r = await fetch('/spectrum.json', { cache: 'no-store' });
     let j = await r.json();
 
-    if (j.interval === 0) {
+    if (j.autoscan) {
+      banner.style.display = 'block';
+      if (j.status === 'rx') {
+        banner.textContent = 'Auto-scan locked — receiving ' +
+          (j.rxname ? ('"' + j.rxname + '" ') : '') + 'on ' +
+          (j.rxfreq != null ? j.rxfreq.toFixed(3) : '?') + ' MHz.';
+      } else if (j.as_state === 'trial') {
+        banner.textContent = 'Auto-scan: trying ' +
+          (j.as_tryfreq != null ? j.as_tryfreq.toFixed(3) : '?') + ' MHz as ' +
+          (j.as_trytype || '?') + ' — ' + (j.as_npeaks || 0) + ' peak(s) this sweep.';
+      } else {
+        banner.textContent = 'Auto-scan: sweeping for peaks… (' +
+          (j.as_npeaks || 0) + ' found last sweep).';
+      }
+    } else if (j.interval === 0) {
       banner.style.display = 'block';
       banner.textContent = 'Scan plot disabled — set "scanplotint" > 0 (seconds) to enable.';
     } else if (j.status === 'rx') {

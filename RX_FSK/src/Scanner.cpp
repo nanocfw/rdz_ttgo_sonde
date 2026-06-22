@@ -191,6 +191,10 @@ void Scanner::scan()
 		// Wait TS_HOP (20us) + TS_RSSI ( 2^(scacconfig.SMOOTH+1) / 4 / CHANBW us)
 		delayMicroseconds(wait);
 		int rssi = -(int)sx1278.readRegister(REG_RSSI_VALUE_FSK);
+		// A register read of 0 ("0 dBm") is a rail artifact (e.g. the PLL not yet
+		// settled after a coarse-frequency step), not a real signal. Clamp it to
+		// the noise floor so it neither spikes the plot nor looks like a peak.
+		if(rssi >= 0) rssi = sonde.config.noisefloor * 2;
 		if(iter==0) { scanresult[i] = rssi; } else {
 			if(rssi>scanresult[i]) scanresult[i]=rssi;
 		}
@@ -209,13 +213,17 @@ void Scanner::scan()
 	for(int i=0; i<scanconfig.PLOT_W; i+=1) {
 		int r=scanresult[i*scanconfig.SMPL_PIX];
 		if(r>peakres+1) { peakres=r; peakidx=i*scanconfig.SMPL_PIX; }
-		scandisp[i] = r;
-		for(int j=1; j<scanconfig.SMPL_PIX; j++) { 
-			r = scanresult[i*scanconfig.SMPL_PIX+j]; 
-			scandisp[i]+=r;
+		// Accumulate in a local and store scandisp[i] only once, as the finished
+		// average. Writing the running sum into scandisp[] and dividing in a
+		// second pass left a window where the web task (createSpectrumJson) could
+		// read the un-divided sum (~SMPL_PIX times too negative).
+		int sum = r;
+		for(int j=1; j<scanconfig.SMPL_PIX; j++) {
+			r = scanresult[i*scanconfig.SMPL_PIX+j];
+			sum += r;
 			if(r>peakres+1) { peakres=r; peakidx=i*scanconfig.SMPL_PIX+j; }
 		}
-		//for(int j=1; j<PIXSAMPL; j++) { if(scanresult[i+j]>scandisp[i/PIXSAMPL]) scandisp[i/PIXSAMPL] = scanresult[i+j]; }
+		scandisp[i] = sum / scanconfig.SMPL_PIX;
 		Serial.print(scanresult[i]); Serial.print(", ");
 	}
 	peakidx--;
@@ -224,8 +232,7 @@ void Scanner::scan()
 	else if (newpeakf < peakf) peakf = 0.75*newpeakf + 0.25*peakf;		// averaging on frequency, some bias towards lower...
 	else peakf = 0.25*newpeakf + 0.75*peakf;
 	Serial.println("\n");
-	for(int i=0; i<scanconfig.PLOT_W; i++) { 
-		scandisp[i]/=scanconfig.SMPL_PIX;
+	for(int i=0; i<scanconfig.PLOT_W; i++) {
                 Serial.print(scandisp[i]); Serial.print(", ");
 	}
 	Serial.println("\n");
@@ -235,6 +242,73 @@ void Scanner::scan()
 #endif
 }
 
+int Scanner::findPeaks(ScanPeak *out, int maxpeaks, int snr_db, int mindist_hz, int quant_hz)
+{
+	int N = scanconfig.PLOT_W * scanconfig.SMPL_PIX;
+	if (N > MAXN) N = MAXN;
+	if (N < 1 || maxpeaks < 1) return 0;
+	if (maxpeaks > 64) maxpeaks = 64;
+	if (quant_hz < 1) quant_hz = 1;
+
+	// Some frequencies (typically the band edges) read the RSSI register as 0,
+	// i.e. "0 dBm" — a rail artifact, not a real signal. Treat any non-negative
+	// reading (scanresult >= 0) as invalid so it neither skews the noise floor
+	// nor gets picked as a (very strong) peak.
+	#define SCAN_VALID(i) (scanresult[i] < 0)
+
+	// Estimate the noise floor as the median of the valid bins, via a histogram
+	// over reg = -scanresult[i] (1..255). Robust because most bins are noise.
+	int hist[256];
+	for (int i = 0; i < 256; i++) hist[i] = 0;
+	int validN = 0;
+	for (int i = 0; i < N; i++) {
+		if (!SCAN_VALID(i)) continue;
+		int reg = -scanresult[i];
+		if (reg > 255) reg = 255;
+		hist[reg]++;
+		validN++;
+	}
+	if (validN < 1) return 0;			// no usable spectrum data
+	int medianReg = 0, cum = 0;
+	for (int r = 0; r < 256; r++) { cum += hist[r]; if (cum >= validN / 2) { medianReg = r; break; } }
+	int noisefloorVal = -medianReg;			// scanresult units (= 2*dBm)
+	int threshold = noisefloorVal + 2 * snr_db;	// SNR in dB -> 2x in these units
+
+	double hzPerBin = 1000.0 * scanconfig.CHANSTEP;
+	int mindistBins = (int)(mindist_hz / hzPerBin);
+	if (mindistBins < 1) mindistBins = 1;
+
+	int selBin[64];
+	int npk = 0;
+	// Greedy: repeatedly take the strongest bin above threshold that is not within
+	// mindist of, nor on the same quantized channel as, an already-selected peak.
+	for (int k = 0; k < maxpeaks; k++) {
+		int bestBin = -1, bestVal = threshold;
+		for (int i = 0; i < N; i++) {
+			if (!SCAN_VALID(i)) continue;		// skip rail/invalid readings
+			int v = scanresult[i];
+			if (v <= bestVal) continue;
+			double f = STARTF + hzPerBin * i;
+			double qf = (double)(long)(f / quant_hz + 0.5) * quant_hz;
+			bool excluded = false;
+			for (int s = 0; s < npk; s++) {
+				if (abs(i - selBin[s]) < mindistBins) { excluded = true; break; }
+				if (qf == out[s].freqHz) { excluded = true; break; }
+			}
+			if (excluded) continue;
+			bestVal = v; bestBin = i;
+		}
+		if (bestBin < 0) break;
+		double f = STARTF + hzPerBin * bestBin;
+		out[npk].freqHz = (double)(long)(f / quant_hz + 0.5) * quant_hz;
+		out[npk].power = scanresult[bestBin];
+		selBin[npk] = bestBin;
+		npk++;
+	}
+	return npk;
+}
+#undef SCAN_VALID
+
 Scanner scanner = Scanner();
 
 void Scanner::scanForWeb()
@@ -242,7 +316,7 @@ void Scanner::scanForWeb()
 	// scan() fills scanresult[]/scandisp[] and peakf; it does NOT draw to the display.
 	scan();
 	scanWebMillis = millis();
-	scanWebSeq++;
+	scanWebSeq = scanWebSeq + 1;	// avoid deprecated ++ on a volatile (C++20 -Wvolatile)
 }
 
 uint32_t Scanner::webSeq() { return scanWebSeq; }

@@ -311,6 +311,17 @@ typedef struct st_rdzconfig {
 	int norx_timeout;		// Time after which rx mode switches to scan mode (without rx signal)
 	int noisefloor;			// for spectrum display
 	int scanplotint;		// web scan-plot idle-sweep interval in seconds (0=disable)
+	// Auto-scan (peak detection) settings. When autoscan_enable is set, the
+	// firmware ignores the configured channel list and instead sweeps the
+	// spectrum, finds peaks above the noise floor and trial-decodes each one,
+	// like radiosonde_auto_rx. Names/defaults mirror auto_rx's scanner.
+	int autoscan_enable;    // 1 = use peak-detection auto-scan instead of the channel list
+	int autoscan_snr;       // min SNR (dB) above the (median) noise floor for a peak
+	int autoscan_mindist;   // min distance between detected peaks (Hz)
+	int autoscan_quant;     // quantize detected peaks to this step (Hz; sondes use 10 kHz)
+	int autoscan_maxpeaks;  // max peaks to trial-decode per sweep
+	int autoscan_dwell;     // per-peak detection budget (s), split across enabled sonde types
+	int autoscan_rxtimeout; // after this many s with no valid frame on a locked sonde, re-scan
 	int allowfileupload;		// allow firmware/filesystem upload from the update page (0=disable). Hidden: not in cfg.js
 	char mdnsname[15];		// mDNS-Name, defaults to rdzsonde
 	// receiver configuration
@@ -391,6 +402,11 @@ public:
 	/* new interface */
 	void setup();
 	void receive();
+	// Tune+decode one frame for the current sondeList[rxtask.currentSonde] entry,
+	// returning the raw decoder result (RX_OK/RX_ERROR/RX_TIMEOUT). Used by the
+	// auto-scan trial-decode loop; unlike receive() it has no event/timeout/display
+	// side effects.
+	uint16_t rxRawFrame();
 	uint16_t waitRXcomplete();
 
 	SondeInfo *si();
