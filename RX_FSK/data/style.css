@@ -506,6 +506,17 @@ h1{
    isn't clipped by the nav's overflow:hidden. */
 .header { position: relative; }
 .usermenu { position: absolute; top: 0; right: 0; }
+/* Reserve space at the right of the nav (index.html only) so wrapping tabs never slide
+   under the absolutely-positioned user menu. Reset on mobile, where the tabs collapse
+   into the hamburger and the menu only needs to clear the icon (see media query below). */
+#myTopnav { padding-right: 10em; }
+.usermenu-name {
+  display: inline-block;
+  max-width: 6em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .usermenu-btn {
   display: flex;
   align-items: center;
@@ -568,6 +579,7 @@ h1{
 }
 @media screen and (max-width: 600px) {
   .usermenu { right: 3.4em; }   /* leave room for the hamburger icon at the far right */
+  #myTopnav { padding-right: 0; }  /* tabs collapse to the hamburger here; no reserve needed */
 }
 
 /* When the screen is less than 600 pixels wide, hide all links, except for the first one ("Home"). Show the link that contains should open and close the topnav (.icon) */
