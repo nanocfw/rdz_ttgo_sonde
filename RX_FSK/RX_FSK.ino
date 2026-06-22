@@ -1289,7 +1289,15 @@ const char *createControlForm(int authLevel, bool reloadAfter) {
   strcat(ptr, "\"></script><script>function confirmSubmit(b,msg){"
               "showConfirm(msg).then(function(ok){if(!ok)return;"
               "var h=document.createElement('input');h.type='hidden';h.name=b.name;h.value=b.value;"
-              "b.form.appendChild(h);b.form.submit();});return false;}</script>");
+              "b.form.appendChild(h);b.form.submit();});return false;}"
+              // Reboot uses the same reload logic as firmware update / config restore: confirm,
+              // capture the boot nonce, fire the reboot POST (no response -- the device restarts at
+              // once), then poll /bootid and reload the page once it is back online.
+              "function confirmReboot(msg){showConfirm(msg).then(function(ok){if(!ok)return;"
+              "fetch('/bootid',{cache:'no-store'}).then(function(r){return r.ok?r.text():'';})"
+              ".catch(function(){return '';}).then(function(before){"
+              "fetch('/control.html',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'reboot=1'}).catch(function(){});"
+              "waitForRebootAndReload((before||'').trim(),'Rebooting','The device is rebooting.');});});return false;}</script>");
   strcat(ptr, "</head>");
   HTMLBODY(ptr, "control.html");
   if (reloadAfter) {
@@ -1330,7 +1338,7 @@ const char *createControlForm(int authLevel, bool reloadAfter) {
       strcat(ptr, " onclick=\"return confirmSubmit(this,'Format the SD card?\\nThis permanently erases all data on the card.');\"");
 #endif
     if (strcmp(ctrlid[i], "reboot") == 0)
-      strcat(ptr, " onclick=\"return confirmSubmit(this,'Reboot the device now?');\"");
+      strcat(ptr, " onclick=\"return confirmReboot('Reboot the device now?');\"");
     strcat(ptr, disabled ? " disabled></input>" : "></input>");
     if (i == 3 || i == 7 ) {
       strcat(ptr, "<p></p>");

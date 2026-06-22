@@ -221,11 +221,35 @@ def render_control_page(version_id, level=2):
     for name, label, minlevel in CONTROL_EXTRA:
         if level < minlevel:
             continue  # e.g. Format SD Card is hidden below admin (level 2)
-        btns += ('<input class="ctlbtn" type="submit" name="%s" value="%s"></input>'
-                 % (name, label))
+        # Mirror createControlForm(): guard the disruptive buttons with the styled confirmation.
+        onclick = ""
+        if name == "format":
+            onclick = (" onclick=\"return confirmSubmit(this,'Format the SD card?"
+                       "\\nThis permanently erases all data on the card.');\"")
+        elif name == "reboot":
+            onclick = " onclick=\"return confirmReboot('Reboot the device now?');\""
+        btns += ('<input class="ctlbtn" type="submit" name="%s" value="%s"%s></input>'
+                 % (name, label, onclick))
+    # confirmSubmit / confirmReboot mirror the inline script createControlForm() emits: the
+    # Reboot path captures /bootid, fires the reboot POST and waits for the device to come back
+    # via waitForRebootAndReload() (dialog.js), so the reload flow is testable in preview.
+    script = (
+        '<script src="dialog.js"></script><script>'
+        'function confirmSubmit(b,msg){showConfirm(msg).then(function(ok){if(!ok)return;'
+        "var h=document.createElement('input');h.type='hidden';h.name=b.name;h.value=b.value;"
+        'b.form.appendChild(h);b.form.submit();});return false;}'
+        'function confirmReboot(msg){showConfirm(msg).then(function(ok){if(!ok)return;'
+        "fetch('/bootid',{cache:'no-store'}).then(function(r){return r.ok?r.text():'';})"
+        ".catch(function(){return '';}).then(function(before){"
+        "fetch('/control.html',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'reboot=1'}).catch(function(){});"
+        "waitForRebootAndReload((before||'').trim(),'Rebooting','The device is rebooting.');});});return false;}"
+        '</script>'
+    )
     return (
         '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-        '<link rel="stylesheet" type="text/css" href="style.css"></head>'
+        '<link rel="stylesheet" type="text/css" href="style.css">'
+        + script +
+        '</head>'
         '<body><form class="wrapper" action="control.html" method="post"><div class="content">'
         + btns +
         '</div><div class="footer"><span></span>'
