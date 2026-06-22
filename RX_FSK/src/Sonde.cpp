@@ -580,7 +580,9 @@ SondeInfo *Sonde::si() {
 }
 
 void Sonde::setup() {
-	if(rxtask.currentSonde<0 || rxtask.currentSonde>=config.maxsonde) {
+	// MAXSONDE is the spare last slot reserved for the auto-scan scratch entry; accept it
+	// even though it is outside the configured range [0,maxsonde).
+	if(rxtask.currentSonde<0 || (rxtask.currentSonde>=config.maxsonde && rxtask.currentSonde!=MAXSONDE)) {
 		LOG_E(TAG, "Invalid rxtask.currentSonde: %d\n", rxtask.currentSonde);
 		rxtask.currentSonde = 0;
 		for(int i=0; i<config.maxsonde - 1; i++) {

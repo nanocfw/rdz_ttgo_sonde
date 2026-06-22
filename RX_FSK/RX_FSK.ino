@@ -179,15 +179,11 @@ void loopAutoScan();
 static void autoscanReset();
 // Auto-scan is on when configured; it then ignores the channel list entirely.
 static inline bool autoscanActive() { return sonde.config.autoscan_enable != 0; }
-// Scratch channel slot used by auto-scan for trial/locked decoding, chosen past
-// the configured channels so the user's qrg.txt list is never overwritten in RAM.
-// (sondeList is allocated with MAXSONDE+1 entries; setup() requires index < maxsonde.)
-static inline int autoscanSlot() {
-  int s = sonde.nSonde;
-  if (s >= sonde.config.maxsonde) s = sonde.config.maxsonde - 1;
-  if (s < 0) s = 0;
-  return s;
-}
+// Scratch channel slot used by auto-scan for trial/locked decoding. It is the spare
+// last entry of sondeList (allocated with MAXSONDE+1 slots), i.e. OUTSIDE the configured
+// range [0,maxsonde) -- so it never overwrites a user channel and never shows up in the
+// QRG editor or the per-channel status/KML loops. setup() accepts this index specially.
+static inline int autoscanSlot() { return MAXSONDE; }
 void WiFiEvent(WiFiEvent_t event);
 
 
