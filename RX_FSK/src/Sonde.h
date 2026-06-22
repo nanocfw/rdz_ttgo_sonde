@@ -316,7 +316,7 @@ typedef struct st_rdzconfig {
 	// RSSI / better weak-peak detection, slower sweep. Plot geometry is unaffected.
 	int scan_smooth;        // SX1278 RSSI averaging exponent 0..7 (samples = 2^(n+1)); -1 = default
 	int scan_addwait;       // extra per-bin settle time in microseconds; -1 = default
-	int scan_iter;          // number of full sweeps per scan (max RSSI kept); 1..20, default 3
+	int scan_iter;          // number of full sweeps per scan (max RSSI kept); 1..20, default 6
 	// Auto-scan (peak detection) settings. When autoscan_enable is set, the
 	// firmware ignores the configured channel list and instead sweeps the
 	// spectrum, finds peaks above the noise floor and trial-decodes each one,

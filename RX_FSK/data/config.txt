@@ -73,7 +73,7 @@ marker=1
 scanplotint=60
 scan_smooth=-1
 scan_addwait=-1
-scan_iter=3
+scan_iter=6
 #-------------------------------#
 # Auto-scan (peak detection; ignores qrg.txt when enabled)
 #-------------------------------#

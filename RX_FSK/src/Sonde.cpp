@@ -377,7 +377,7 @@ void Sonde::defaultConfig() {
 	config.scanplotint=60;
 	config.scan_smooth=-1;          // use per-display default
 	config.scan_addwait=-1;         // use per-display default
-	config.scan_iter=3;             // full sweeps per scan (max RSSI kept)
+	config.scan_iter=6;             // full sweeps per scan (max RSSI kept; spans >1s for RS41)
 	// Auto-scan defaults (mirror radiosonde_auto_rx's scanner where applicable)
 	config.autoscan_enable=0;       // off: use the configured channel list
 	config.autoscan_snr=10;         // dB above noise floor

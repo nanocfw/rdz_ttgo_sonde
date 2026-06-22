@@ -25,7 +25,7 @@ var cfgs = [
 [ "scanplotint", "Web scan-plot idle-sweep interval [sec] (0=disabled)" ],
 [ "scan_smooth", "Scan RSSI averaging 0..7 (samples=2^(n+1)); -1=display default" ],
 [ "scan_addwait", "Scan extra per-bin settle time [us]; -1=display default" ],
-[ "scan_iter", "Scan sweeps per scan (1..20, default 3; more = catch periodic signals)" ],
+[ "scan_iter", "Scan sweeps per scan (1..20, default 6; more = catch periodic signals)" ],
 [ "", "Auto-scan (peak detection; ignores the frequency list when enabled)" ],
 [ "autoscan_enable", "Auto-scan enable (1=find sondes on spectrum peaks, 0=use frequency list)" ],
 [ "autoscan_snr", "Auto-scan: min SNR above noise floor [dB] (default 10)" ],
