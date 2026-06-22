@@ -912,6 +912,10 @@ volatile int autoscanWebNpeaks = 0;       // peaks found in the last sweep
 float autoscanWebPeakF[AUTOSCAN_MAXPK];   // detected peak frequencies (MHz)
 volatile int autoscanWebPeakN = 0;        // valid entries in autoscanWebPeakF[]
 
+// millis() of the last valid frame from the auto-locked sonde; the locked decode
+// holds until norx_timeout seconds elapse with no frame, then re-scans.
+unsigned long autoLockGoodMs = 0;
+
 const char *createSpectrumJson() {
   // Reads scandisp[]/peakf lock-free from the web task while the RX task may be
   // sweeping; mirrors createLiveJson(). Display-only data, so a momentarily mixed
@@ -1007,7 +1011,6 @@ struct st_configitems config_list[] = {
   {"autoscan_maxpeaks", 0, &sonde.config.autoscan_maxpeaks},
   {"autoscan_dwell", 0, &sonde.config.autoscan_dwell},
   {"autoscan_typedwell", 0, &sonde.config.autoscan_typedwell},
-  {"autoscan_rxtimeout", 0, &sonde.config.autoscan_rxtimeout},
   {"allowfileupload", 0, &sonde.config.allowfileupload},
   /* decoder settings */
   {"freqofs", 0, &sonde.config.freqofs},
@@ -2986,24 +2989,21 @@ static char rdzData[RDZ_DATA_LEN];
 static int rdzDataPos = 0;
 
 void loopDecoder() {
-  // Auto-scan mode: we locked onto a peak-detected sonde (held in the scratch
-  // slot). Return to sweeping the spectrum if it stops decoding for
-  // autoscan_rxtimeout seconds, or if a receive timeout caused the decoder to
-  // wander off the scratch slot onto a configured channel.
-  if (autoscanActive()) {
-    int slot = autoscanSlot();
-    SondeInfo *as = &sonde.sondeList[slot];
-    bool wandered = (rxtask.currentSonde != slot);
-    bool lost = (as->lastState == 0 &&
-                 (millis() - as->norxStart) > (unsigned long)sonde.config.autoscan_rxtimeout * 1000UL);
-    if (wandered || lost) {
-      LOG_I(TAG, "AutoScan: %s, returning to scan\n", wandered ? "decoder left scratch slot" : "no data");
-      enterMode(ST_AUTOSCAN);
-      return;
-    }
+  // Auto-scan mode: hold the peak-detected sonde while it keeps decoding; return
+  // to sweeping only after norx_timeout seconds with no valid frame (same knob the
+  // normal decoder uses for "no signal -> scan"). Tracked via the last good frame
+  // so the decoder's own timeout/cycling can't trigger an early exit.
+  if (autoscanActive() && sonde.config.norx_timeout > 0 &&
+      (millis() - autoLockGoodMs) > (unsigned long)sonde.config.norx_timeout * 1000UL) {
+    LOG_I(TAG, "AutoScan: no data for %ds, returning to scan\n", sonde.config.norx_timeout);
+    enterMode(ST_AUTOSCAN);
+    return;
   }
   // sonde knows the current type and frequency, and delegates to the right decoder
   uint16_t res = sonde.waitRXcomplete();
+  // Refresh the auto-scan no-signal timer on a good frame from the locked sonde.
+  if (autoscanActive() && (res & 0xff) == 0 && rxtask.receiveSonde == autoscanSlot())
+    autoLockGoodMs = millis();
   int action;
   //LOG_D(TAG, "waitRX result is %x\n", (int)res);
   action = (int)(res >> 8);
@@ -3279,6 +3279,8 @@ static void autoscanReset() {
 }
 
 void loopAutoScan() {
+  // Auto-scan turned off at runtime (config change) -> resume normal decoding.
+  if (!autoscanActive()) { setCurrentDisplay(1); enterMode(ST_DECODER); return; }
   // Buttons: let the user escape to the WiFi/config screen or manual spectrum.
   int key = getKeyPress();
   if (key != KP_NONE) sonde.dispsavectlON();         // any key wakes the display
@@ -3361,6 +3363,7 @@ void loopAutoScan() {
   if (res == RX_OK) {
     SondeInfo *si = &sonde.sondeList[autoscanSlot()];
     LOG_I(TAG, "AutoScan: LOCK %.3f MHz as %s\n", si->freq, sondeTypeStr[si->type]);
+    autoLockGoodMs = millis();                       // start the no-signal timer fresh
     sonde.dispsavectlON();                           // wake the display for the locked sonde
     setCurrentDisplay(1);                            // default sonde display
     enterMode(ST_DECODER, true);                     // hand off to the normal decoder

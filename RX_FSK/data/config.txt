@@ -84,7 +84,6 @@ autoscan_quant=10000
 autoscan_maxpeaks=10
 autoscan_dwell=12
 autoscan_typedwell=0
-autoscan_rxtimeout=180
 #-------------------------------#
 # APRS settings
 #-------------------------------#

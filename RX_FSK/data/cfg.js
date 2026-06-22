@@ -34,7 +34,6 @@ var cfgs = [
 [ "autoscan_maxpeaks", "Auto-scan: max peaks per sweep (default 10)" ],
 [ "autoscan_dwell", "Auto-scan: detection time per peak [sec], split across types (default 12)" ],
 [ "autoscan_typedwell", "Auto-scan: fixed decode time per type [ms]; 0=derive from dwell" ],
-[ "autoscan_rxtimeout", "Auto-scan: re-scan after no data for [sec] (default 180)" ],
 [ "", "Receiver configuration", "https://github.com/dl9rdz/rdz_ttgo_sonde/wiki/Receiver-configuration" ],
 [ "freqofs", "RX frequency offset (Hz)"],
 [ "lnaboost", "LNA current boost (0=default, 1=150%; useful without external LNA)"],
