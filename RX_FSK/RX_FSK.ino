@@ -39,6 +39,7 @@
 
 #include "src/pmu.h"
 #include "src/user.h"
+#include "src/crypto.h"
 
 
 /* Data exchange connectors */
@@ -308,12 +309,6 @@ String processor(const String& var) {
   if (var == "ALLOWFILEUPLOAD") {
     return String(sonde.config.allowfileupload);
   }
-  if (var == "PREAUTH") {
-    char preauth[COOKIE_SIZE];
-    generateRandomCookie("preauth",preauth);
-    storeCookie(preauth, -1);  // preauth value
-    return String(preauth);
-  }
   return String();
 }
 
@@ -473,32 +468,28 @@ const char *handleLoginPost(AsyncWebServerRequest * request) {
   LOG_D(TAG, "Handling login POST request");
 
   const AsyncWebParameter *userp = request->getParam("user", true, false);
-  const AsyncWebParameter *authp = request->getParam("auth", true, false);
-  const AsyncWebParameter *preauthp= request->getParam("preauth", true, false);
-  if (!userp || !authp || !preauthp) {
+  const AsyncWebParameter *passp = request->getParam("password", true, false);
+  if (!userp || !passp) {
     request->send(400, "text/plain", "Invalid Request");
     return nullptr;
   }
 
   String username = userp->value();
-  String preauth = preauthp->value();
-  String auth = authp->value();
+  String password = passp->value();
 
-  int ulvl = getUserPermissions(username.c_str(), preauth.c_str(), auth.c_str());
-  if(ulvl> 0) {
-    // Generate a new session cookie
+  int ulvl = verifyPassword(username.c_str(), password.c_str());
+  if (ulvl > 0) {
+    // Issue a stateless JWT session token (signed with the device key; survives reboot).
     char cookie[COOKIE_SIZE];
-    generateRandomCookie(username.c_str(), cookie);
-    if(upgradeCookie(preauth.c_str(), cookie, ulvl)==0) {
-      // Set cookie and redirect
+    if (jwtCreate(username.c_str(), ulvl, SESSION_TTL_SEC, cookie, sizeof(cookie)) > 0) {
       AsyncWebServerResponse *response = request->beginResponse(302);
-      response->addHeader("Location","/index.html");
+      response->addHeader("Location", "/index.html");
       response->addHeader("Set-Cookie", "SESSION=" + String(cookie) + "; Path=/; SameSite=Strict");
       request->send(response);
       return nullptr;
     }
   }
-  request->send(401, "text/plain", "Invalid credentials or session expired");
+  request->send(401, "text/plain", "Invalid credentials");
   return nullptr;
 }
 
@@ -532,10 +523,9 @@ static void getSessionCookie(AsyncWebServerRequest *request, char *dst, int maxl
 }
 
 void handleLogout(AsyncWebServerRequest * request) {
-  // Revoke the server-side session, clear the client cookie, and return to the login page
-  char session[COOKIE_SIZE];
-  getSessionCookie(request, session, COOKIE_SIZE);
-  if(session[0]) removeCookie(session);
+  // Sessions are stateless JWTs (nothing to revoke server-side), so logout just clears
+  // the client cookie and returns to the login page. To invalidate ALL sessions at once,
+  // rotate the JWT signing key (see the control page).
   AsyncWebServerResponse *response = request->beginResponse(302);
   response->addHeader("Location", "/login.html");
   response->addHeader("Set-Cookie", "SESSION=; Path=/; Max-Age=0; SameSite=Strict");
@@ -1373,6 +1363,11 @@ bool handleControlPost(AsyncWebServerRequest * request, int authLevel) {
     }
     else if (param.equals("reboot")) {
       ESP.restart();
+    }
+    else if (param.equals("logout_all")) {
+      // Rotate the JWT signing key so every existing session token becomes invalid.
+      if (authLevel >= 2) rotateJwtKey();
+      else LOG_W(TAG, "Rejected logout-all request: insufficient auth level (%d)\n", authLevel);
     }
   }
   return screenChanged;
@@ -2709,6 +2704,14 @@ void setup()
   if (!LittleFS.begin(true)) {
     Serial.println("An Error has occurred while mounting LittleFS");
     return;
+  }
+
+  // If the device has no password key yet (fresh device, or NVS was erased), any existing
+  // /user.txt cannot be valid against it (it was plaintext from old firmware, or hashed
+  // with a key that's gone). Wipe it so the admin re-bootstraps user accounts.
+  if (!deviceKeysExist()) {
+    Serial.println("No device key present: clearing /user.txt for fresh user setup");
+    LittleFS.remove("/user.txt");
   }
 
   Serial.println("Reading initial configuration");

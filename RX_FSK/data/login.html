@@ -23,37 +23,21 @@
         // If loaded inside a tab iframe (e.g. after an auth redirect), take over the full window
         if (window.top !== window.self) { window.top.location.href = "/login.html"; }
     </script>
-    <script src="sha256.min.js?v=%VERSION_ID%" type="text/javascript"></script>
     <script src="dialog.js?v=%VERSION_ID%" type="text/javascript"></script>
     <script>
-        function computeHash(event) {
+        function doLogin(event) {
             event.preventDefault(); // Prevent form's default submission behavior
             const username = document.getElementById('user').value;
             const password = document.getElementById('pass').value;
-            const preauth = document.getElementById('preauth').value;
-            const auth = sha256(`${username}:${preauth}:${password}`);
-            document.getElementById('pass').value = '';
-            // Submit via fetch so we can surface login errors in an alert instead of
-            // navigating away to a bare text response. On success the server replies with a
-            // redirect (+Set-Cookie), which fetch follows; we then load the home page.
-            const body = new URLSearchParams({ user: username, preauth: preauth, auth: auth });
+            // The server verifies the password against a salted+peppered hash, so the
+            // plaintext is sent here (the device has no TLS; the session cookie and all
+            // other traffic already travel in clear over HTTP). On success the server
+            // replies with a redirect (+Set-Cookie JWT), which fetch follows.
+            const body = new URLSearchParams({ user: username, password: password });
             fetch('/login.html', { method: 'POST', body: body, credentials: 'same-origin' })
                 .then(resp => {
-                    if (resp.ok) {
-                        // We just authenticated against the running firmware. Drop any stale
-                        // bootID so index.html's reboot-detection doesn't mistake the fresh
-                        // session cookie for a pre-reboot one and clear it (index.html will
-                        // record the current bootID itself on load).
-                        try { localStorage.removeItem('bootID'); } catch (e) {}
-                        window.location.href = '/index.html';
-                        return;
-                    }
-                    return resp.text().then(msg => {
-                        // A failed login does NOT consume the preauth nonce (it is only
-                        // consumed on success), and it stays valid for ~60s -- so the user can
-                        // simply retype the password and retry, no page reload needed.
-                        showAlert(msg || 'Login failed');
-                    });
+                    if (resp.ok) { window.location.href = '/index.html'; return; }
+                    return resp.text().then(msg => showAlert(msg || 'Login failed'));
                 })
                 .catch(() => { showAlert('Login failed (network error)'); });
         }
@@ -70,15 +54,13 @@
   <h1>%VERSION_NAME% version %VERSION_ID%</h1>
   <p>Copyright &copy; 2019-2026 by Hansi Reiser, DL9RDZ and contributors</p>
   <br>
-    <form id="loginForm" action="/login.html" method="POST" onsubmit="computeHash(event)">
+    <form id="loginForm" action="/login.html" method="POST" onsubmit="doLogin(event)">
         <label for="user">Username:</label>
         <input type="text" id="user" name="user" required><br><br>
-        
-        <label for="pass">Password:</label>
-        <input type="password" id="pass" name="pass" required><br><br>
 
-        <input type="hidden" id="preauth" name="preauth" value="%PREAUTH%">
-        <input type="hidden" id="auth" name="auth" value=""> 
+        <label for="pass">Password:</label>
+        <input type="password" id="pass" name="password" required><br><br>
+
         <button type="submit">Login</button>
     </form>
   </div>

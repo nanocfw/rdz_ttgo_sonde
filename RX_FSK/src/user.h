@@ -1,23 +1,21 @@
 
-// Session/preauth cookie layout: up to USERLEN username chars + ':' + RNDLEN random chars + '\0'.
-// COOKIE_SIZE must stay in sync with the SessionCookie.value buffer in user.cpp, so derive both
-// from the same macros instead of hardcoding the length.
-#define USERLEN 8
-#define RNDLEN 16
-#define COOKIE_SIZE (USERLEN+RNDLEN+2)
+// Web authentication.
+// Sessions are stateless JWTs (signed with the device key, see crypto.h): they are only
+// verified, never stored, so logins survive reboots. COOKIE_SIZE must hold a JWT.
+#define USERLEN 32
+#define COOKIE_SIZE 320
 
 enum { PERM_NONE, PERM_RO, PERM_ADMIN } permissions;
 
-void cleanupExpiredCookies();
-void storeCookie(const char *cookie, char userclass);
-int upgradeCookie(const char *preauth, const char *cookie, char userclass);
-void generateRandomCookie(const char *user, char *cookie);
+// Verify a JWT session token; returns the access level (0/1/2) or -1 if invalid/expired.
 int getCookieAuthLevel(const char *cookie);
-int removeCookie(const char *cookie);
-int getUserPermissions(const char *user, const char *preauth, const char *auth);
+
+// Verify a plaintext password for `user`; returns the user's access level (>=0) or -1.
+int verifyPassword(const char *user, const char *password);
+
 int getDefaultAuthLevel();
 
-// User management (named users in /user.txt)
+// User management (named users in /user.txt; passwords stored hashed)
 int setUser(const char *user, int level, const char *password);
 int deleteUser(const char *user);
 int getUserListJson(char *out, int outlen);

@@ -184,12 +184,17 @@ fetch('/whoami.json')
 	.then(data => applyAccess(typeof data.level === "number" ? data.level : 2))
 	.catch(() => applyAccess(2));  // on error show all tabs; the firmware still enforces access
 
-const bootID = "%BOOTID%";
-const prevID = localStorage.getItem("bootID");
-if(prevID && prevID !== bootID) {
-  document.cookie = `SESSION=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+// Sessions are stateless JWTs signed with a stable device key, so they survive reboots --
+// no bootID-based cookie clearing here anymore.
+
+// Decode the username from a JWT session cookie (payload "sub" claim); null if not present.
+function jwtUser(jwt) {
+  try {
+    const p = jwt.split(".")[1];
+    const json = atob(p.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(json).sub || null;
+  } catch (e) { return null; }
 }
-localStorage.setItem("bootID", bootID);
 
 // Top-right user menu: a dropdown with Log out when signed in, or a direct Login link otherwise.
 (function() {
@@ -199,7 +204,7 @@ localStorage.setItem("bootID", bootID);
   const dd   = document.getElementById("usermenuDropdown");
 
   const sessionC = document.cookie.split("; ").find((row) => row.startsWith("SESSION="))?.split("=")[1];
-  const user = sessionC ? decodeURIComponent(sessionC.split(":")[0]) : null;
+  const user = sessionC ? jwtUser(sessionC) : null;
 
   function closeMenu() { menu.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); }
 
