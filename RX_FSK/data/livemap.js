@@ -104,7 +104,7 @@ headtxt = function(data,stat) {
     $('#sonde_climb').html(data.climb);
     $('#sonde_speed').html( mr(data.speed * 3.6 * 10) / 10 );
     $('#sonde_dir').html(data.dir);
-    $('#sonde_time').html(new Date(data.time * 1000).toISOString());
+    $('#sonde_time').html(localtime(data.time));
     $('#sonde_rssi').html(data.rssi / 2 );
     $('#sonde_detail').show();
   } else {
@@ -453,6 +453,20 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
   };
   az = function(n) { return (n<10)?'0'+n:n; };
   mr = function(n) { return Math.round(n); };
+  // Format a unix epoch (seconds) as local date/time in the viewing browser's
+  // timezone, with a UTC offset suffix (e.g. 2026-06-29 12:34:56 UTC-3).
+  localtime = function(epoch) {
+    var d = new Date(epoch * 1000);
+    var off = -d.getTimezoneOffset();   // minutes east of UTC
+    var ao = Math.abs(off);
+    // No modulo here: livemap.js is served through the ESP template engine,
+    // which treats a paired percent-sign as a placeholder and would eat it.
+    var hh = Math.floor(ao / 60);
+    var mm = ao - hh * 60;
+    var tz = 'UTC' + (off < 0 ? '-' : '+') + hh + (mm ? ':' + az(mm) : '');
+    return d.getFullYear() + '-' + az(d.getMonth()+1) + '-' + az(d.getDate()) + ' ' +
+           az(d.getHours()) + ':' + az(d.getMinutes()) + ':' + az(d.getSeconds()) + ' ' + tz;
+  };
 
   storage = (typeof(Storage) !== "undefined")?true:false;
   storage_write = function (data) {
