@@ -177,8 +177,9 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
   icon_landing = L.divIcon({className: 'leaflet-landing'});
   dots_predict = [];
   line_predict = [];
-  marker_burst = []; 
+  marker_burst = [];
   icon_burst = L.divIcon({className: 'leaflet-burst'});
+  poweroff = {};   // cached absolute power-off time (s epoch) per sonde id
 
   marker = [];
   dots = [];
@@ -377,13 +378,13 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
 
     if (!marker_landing[data.id]) {
       marker_landing[data.id] = L.marker(landing_location,{icon: icon_landing}).addTo(map)
-      .bindPopup(poptxt('landing',landing),{closeOnClick:false, autoPan:false});
+      .bindPopup(poptxt('landing',landing,data.id),{closeOnClick:false, autoPan:false});
     } else {
       marker_landing[data.id].slideTo(landing_location, {
           duration: 500,
           keepAtCenter: (follow=='landing')?true:false
       })
-      .setPopupContent(poptxt('landing',landing));
+      .setPopupContent(poptxt('landing',landing,data.id));
     }
 
     dots_predict[data.id]=[];
@@ -429,7 +430,7 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
     return lon;
   }  
 
-  poptxt = function(t,i) {
+  poptxt = function(t,i,id) {
     var lat_input = (i.id)?i.lat:i.latitude;
     var lon_input = sanitize_lon((i.id)?i.lon:i.longitude);
 
@@ -440,19 +441,57 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
     '<br /><b>Position:</b> '+lat+',  '+lon+'<br />'+
     '<b>Open:</b> <a href="https://www.google.de/maps/?q='+lat+', '+lon+'" target="_blank">GMaps</a> | <a href="https://www.openstreetmap.org/?mlat='+lat+'&mlon='+lon+'&zoom=15" target="_blank">OSM</a> | <a href="geo://'+lat+','+lon+'">GeoApp</a>';
 
-    if (t == 'position') { return '<div class="i_position"><b>🎈 '+i.id+'</b>'+add+'</div>'; }
-    if (t == 'burst') { return '<div class="i_burst"><b>💥 Predicted Burst:</b><br />'+fd(i.datetime)+' at '+mr(i.altitude)+'m'+add+'</div>'; }
+    if (t == 'position') {
+      // RS41 shutdown ("kill") timer: countKT = seconds until power-off as of
+      // frame crefKT. While a kill-timer frame is fresh (crefKT > 0 and within
+      // ~51 frames, as in aprs.cpp / SondeHub; 0xffff = disabled) anchor the
+      // fixed absolute power-off moment. Anchor on the frame's OWN time (i.time,
+      // the GPS epoch of frame vframe) -- NOT the browser clock: after signal
+      // loss live.json keeps returning the last frame, so both i.time and rem
+      // are frozen and i.time+rem stays put. Anchoring on now()+rem instead
+      // would treat that stale frame as received "now", so the absolute time
+      // drifted forward on every poll / page reload (the in-memory cache is
+      // wiped by F5). i.time+rem is reload- and poll-stable, so recomputing it
+      // every time is fine. Other sonde types never set these, so nothing shows.
+      var off = '';
+      if (i.crefKT > 0 && i.countKT != 65535 && i.time > 0
+          && ((i.vframe - i.crefKT) & 0xffff) < 51) {
+        var rem = i.countKT - ((i.vframe - i.crefKT) & 0xffff);
+        if (rem < 0) { rem = 0; }
+        poweroff[i.id] = i.time + rem;
+      }
+      // Derive the live countdown from that fixed moment so "in" and "at" always
+      // agree, and "in" keeps ticking down between frames / after signal loss.
+      if (poweroff[i.id]) {
+        var left = poweroff[i.id] - Math.floor(new Date().getTime() / 1000);
+        if (left < 0) { left = 0; }
+        off = '<br /><b>🔌 Power off in:</b> ' + hms(left) + '<br />at ' + localtime(poweroff[i.id]);
+      }
+      return '<div class="i_position"><b>🎈 '+i.id+'</b>'+off+add+'</div>';
+    }
+    if (t == 'burst') { return '<div class="i_burst"><b>💥 Predicted Burst:</b><br />'+fdl(i.datetime)+' at '+mr(i.altitude)+'m'+add+'</div>'; }
     if (t == 'highest') { return '<div class="i_burst"><b>💥 Burst:</b> '+mr(i.altitude)+'m'+add+'</div>';}
-    if (t == 'landing') { return '<div class="i_landing"><b>🎯 Predicted Landing:</b><br />'+fd(i.datetime)+' at '+mr(i.altitude)+'m'+add+'</div>'; }
+    if (t == 'landing') {
+      // append the cached power-off time (see the 'position' branch) right after
+      // the landing time, so it can be compared against when the sonde shuts down.
+      var off = poweroff[id] ? '<br /><b>🔌 Power off at:</b> ' + localtime(poweroff[id]) : '';
+      return '<div class="i_landing"><b>🎯 Predicted Landing:</b><br />'+fdl(i.datetime)+' at '+mr(i.altitude)+'m'+off+add+'</div>';
+    }
     if (t == 'gps') { return '<div class="i_gps">Position: '+(i.lat)+','+(i.lon)+'<br />Altitude: '+i.alt+'m<br />Speed: '+mr(i.speed * 3.6 * 10)/10+'km/h '+i.dir+'°<br />Sat: '+i.sat+' Hdop:'+(i.hdop/10)+'</div>'; }
   };
 
-  fd = function(date) {
-    var d = new Date(Date.parse(date));
-    return az(d.getUTCHours()) +':'+ az(d.getUTCMinutes())+' UTC';
-  };
+  // Format a predictor datetime string in the browser's local timezone
+  // (full date/time + UTC offset).
+  fdl = function(date) { return localtime(Date.parse(date) / 1000); };
   az = function(n) { return (n<10)?'0'+n:n; };
   mr = function(n) { return Math.round(n); };
+  // Format a number of seconds as h:mm:ss (no modulo: see the localtime note).
+  hms = function(secs) {
+    var h = Math.floor(secs / 3600);
+    var rem = secs - h * 3600;
+    var m = Math.floor(rem / 60);
+    return h + ':' + az(m) + ':' + az(rem - m * 60);
+  };
   // Format a unix epoch (seconds) as local date/time in the viewing browser's
   // timezone, with a UTC offset suffix (e.g. 2026-06-29 12:34:56 UTC-3).
   localtime = function(epoch) {
