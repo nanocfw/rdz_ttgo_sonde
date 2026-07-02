@@ -84,22 +84,24 @@ void Scanner::plotResult()
 {
 	int yofs = 0;
 	char buf[30];
+	// startfreq may be a decimal (or NaN if the config field was cleared); fall back to 400.
+	double sf = isnan(sonde.config.startfreq) ? 400.0 : sonde.config.startfreq;
 	if(ISTFT) {
 		yofs = 2;
   		if (sonde.config.marker != 0) {
-    			itoa((sonde.config.startfreq), buf, 10);
+    			snprintf(buf, sizeof(buf), "%g", sf);
     			disp.rdis->drawString(0, 1, buf);
     			disp.rdis->drawString(scanconfig.PLOT_W/2-9, 1, "MHz");
-    			itoa((sonde.config.startfreq + 6), buf, 10);
+    			snprintf(buf, sizeof(buf), "%g", sf + 6);
     			disp.rdis->drawString(scanconfig.PLOT_W-18, 1, buf);
 		}	
 	}
 	else {
   		if (sonde.config.marker != 0) {
-    			itoa((sonde.config.startfreq), buf, 10);
+    			snprintf(buf, sizeof(buf), "%g", sf);
     			disp.rdis->drawString(0, 1, buf);
     			disp.rdis->drawString(7, 1, "MHz");
-    			itoa((sonde.config.startfreq + 6), buf, 10);
+    			snprintf(buf, sizeof(buf), "%g", sf + 6);
     			disp.rdis->drawString(13, 1, buf);
 		}	
   	}
@@ -166,7 +168,8 @@ void Scanner::scan()
 	if(sonde.config.scan_smooth >= 0) scanconfig.SMOOTH = sonde.config.scan_smooth & 0x07;
 	if(sonde.config.scan_addwait >= 0) scanconfig.ADDWAIT = sonde.config.scan_addwait;
 	// Configure
- 	STARTF = (sonde.config.startfreq * 1000000);
+ 	// startfreq may be a decimal (or NaN if the config field was cleared); fall back to 400 MHz.
+ 	STARTF = ((isnan(sonde.config.startfreq) ? 400.0 : sonde.config.startfreq) * 1000000);
 	sx1278.writeRegister(REG_PLL_HOP, 0x80);   // FastHopOn
 	sx1278.setRxBandwidth((int)(scanconfig.CHANSTEP*1000));
 	double bw = sx1278.getRxBandwidth();

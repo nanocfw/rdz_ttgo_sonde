@@ -921,7 +921,7 @@ const char *createSpectrumJson() {
   unsigned long age = lastms ? (millis() - lastms) : 0;
 
   ptr += sprintf(ptr,
-    "{\"seq\":%u,\"age_ms\":%lu,\"startfreq\":%d,\"step\":%.5f,\"n\":%d,"
+    "{\"seq\":%u,\"age_ms\":%lu,\"startfreq\":%.5g,\"step\":%.5f,\"n\":%d,"
     "\"noisefloor\":%d,\"peak\":%.3f,\"interval\":%d,\"status\":\"%s\"",
     (unsigned)scanner.webSeq(), age, sonde.config.startfreq, scanner.stepMHz(),
     n, sonde.config.noisefloor, scanner.peakMHz(), sonde.config.scanplotint,
@@ -986,7 +986,7 @@ struct st_configitems config_list[] = {
   {"dispcontrast", 0, &sonde.config.dispcontrast},
   /* Spectrum display settings */
   {"spectrum", 0, &sonde.config.spectrum},
-  {"startfreq", 0, &sonde.config.startfreq},
+  {"startfreq", -7, &sonde.config.startfreq},
   {"channelbw", 0, &sonde.config.channelbw},
   {"marker", 0, &sonde.config.marker},
   {"noisefloor", 0, &sonde.config.noisefloor},

@@ -18,7 +18,7 @@ var cfgs = [
 [ "tft_orient", "TFT orientation (0/1/2/3), OLED flip: 3"],
 [ "", "Spectrum display configuration", "https://github.com/dl9rdz/rdz_ttgo_sonde/wiki/Spectrum-configuration" ],
 [ "spectrum", "Show spectrum on start (-1=no, 0=forever, >0=time [sec])" ],
-[ "startfreq", "Start frequency (MHz, default 400)" ],
+[ "startfreq", "Start frequency (MHz, decimals allowed e.g. 400.2; sweep covers this +6 MHz; default 400)" ],
 [ "channelbw", "Bandwidth (kHz)" ],
 [ "marker", "Spectrum MHz marker" ],   // maybe remove, assume always ==1?
 [ "noisefloor", "Spectrum noisefloor" ],
