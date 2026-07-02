@@ -35,6 +35,7 @@ var cfgs = [
 [ "autoscan_dwell", "Auto-scan: detection time per peak [sec], split across types (default 12)" ],
 [ "autoscan_typedwell", "Auto-scan: fixed decode time per type [ms]; 0=derive from dwell" ],
 [ "autoscan_qrgfirst", "Auto-scan: try active frequency-list channels (configured freq+type) before spectrum peaks (default 1)" ],
+[ "autoscan_exclude", "Auto-scan: comma-separated MHz to ignore as noise/birdies, e.g. 400.01,400.11 (empty=none)" ],
 [ "", "Receiver configuration", "https://github.com/dl9rdz/rdz_ttgo_sonde/wiki/Receiver-configuration" ],
 [ "freqofs", "RX frequency offset (Hz)"],
 [ "lnaboost", "LNA current boost (0=default, 1=150%; useful without external LNA)"],

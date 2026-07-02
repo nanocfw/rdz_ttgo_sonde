@@ -387,6 +387,7 @@ void Sonde::defaultConfig() {
 	config.autoscan_dwell=12;       // s per peak (~2.4 s/type with 5 types; enough for RS41)
 	config.autoscan_typedwell=0;    // 0 = derive per-type time from autoscan_dwell
 	config.autoscan_qrgfirst=1;     // on: each cycle try active channel-list QRGs before spectrum peaks
+	config.autoscan_exclude[0]=0;   // no excluded (known-noise) frequencies by default
 	config.allowfileupload=0;
 	config.channelbw=10;
 	config.marker=0;

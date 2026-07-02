@@ -1003,6 +1003,7 @@ struct st_configitems config_list[] = {
   {"autoscan_dwell", 0, &sonde.config.autoscan_dwell},
   {"autoscan_typedwell", 0, &sonde.config.autoscan_typedwell},
   {"autoscan_qrgfirst", 0, &sonde.config.autoscan_qrgfirst},
+  {"autoscan_exclude", 63, &sonde.config.autoscan_exclude},
   {"allowfileupload", 0, &sonde.config.allowfileupload},
   /* decoder settings */
   {"freqofs", 0, &sonde.config.freqofs},
@@ -3319,6 +3320,29 @@ static inline bool autoscanQrgFirst() {
   return sonde.config.autoscan_qrgfirst != 0 && sonde.nSonde > 0;
 }
 
+// True if freqHz is within tolerance of any frequency (MHz) listed in the
+// comma-separated autoscan_exclude config -- known local birdies/noise to skip
+// during peak detection. Tolerance is half the peak-quantization step (so entering
+// the frequency shown in the peak list matches), floored at 1 kHz.
+static bool autoscanExcluded(double freqHz) {
+  const char *s = sonde.config.autoscan_exclude;
+  if (!s || !*s) return false;
+  long tol = sonde.config.autoscan_quant > 0 ? sonde.config.autoscan_quant / 2 : 5000;
+  if (tol < 1000) tol = 1000;
+  while (*s) {
+    while (*s == ' ' || *s == ',') s++;   // skip separators
+    if (!*s) break;
+    double fMHz = atof(s);
+    if (fMHz > 0) {
+      double d = freqHz - fMHz * 1e6;
+      if (d < 0) d = -d;
+      if (d <= (double)tol) return true;
+    }
+    while (*s && *s != ',') s++;           // advance to next token
+  }
+  return false;
+}
+
 static void autoscanReset() {
   asState = autoscanQrgFirst() ? AS_QRG : AS_SWEEP;
   asNpeaks = 0;
@@ -3421,6 +3445,20 @@ void loopAutoScan() {
     if (maxpk > AUTOSCAN_MAXPK) maxpk = AUTOSCAN_MAXPK;
     asNpeaks = scanner.findPeaks(asPeaks, maxpk, sonde.config.autoscan_snr,
                                  sonde.config.autoscan_mindist, sonde.config.autoscan_quant);
+    // Drop peaks on configured known-noise frequencies (autoscan_exclude) so we don't
+    // waste dwell trial-decoding a local birdie/spur. QRG channels are not filtered.
+    {
+      int kept = 0;
+      for (int i = 0; i < asNpeaks; i++) {
+        if (autoscanExcluded(asPeaks[i].freqHz)) {
+          LOG_I(TAG, "AutoScan: excluding peak %.3f MHz (autoscan_exclude)\n", asPeaks[i].freqHz * 1e-6);
+          continue;
+        }
+        if (kept != i) asPeaks[kept] = asPeaks[i];
+        kept++;
+      }
+      asNpeaks = kept;
+    }
     // Publish peak list to the web scan-plot.
     int pn = asNpeaks; if (pn > AUTOSCAN_MAXPK) pn = AUTOSCAN_MAXPK;
     for (int i = 0; i < pn; i++) autoscanWebPeakF[i] = asPeaks[i].freqHz * 1e-6;

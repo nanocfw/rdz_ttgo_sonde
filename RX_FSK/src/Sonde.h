@@ -329,6 +329,7 @@ typedef struct st_rdzconfig {
 	int autoscan_dwell;     // per-peak detection budget (s); per-type = this/N_types unless typedwell set
 	int autoscan_typedwell; // fixed decode time per sonde type (ms); 0 = derive from autoscan_dwell
 	int autoscan_qrgfirst;  // 1 = each cycle try the active channel-list QRGs (configured freq+type) before the spectrum peaks
+	char autoscan_exclude[64]; // comma-separated MHz of known noise/birdies to ignore in peak detection (e.g. "400.01,400.11")
 	int allowfileupload;		// allow firmware/filesystem upload from the update page (0=disable). Hidden: not in cfg.js
 	char mdnsname[15];		// mDNS-Name, defaults to rdzsonde
 	// receiver configuration
