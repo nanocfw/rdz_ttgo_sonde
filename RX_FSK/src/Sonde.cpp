@@ -692,6 +692,14 @@ void Sonde::receive() {
 		if(action==ACT_DISPLAY_SCANNER) {
 			// nothing to do here, be re-call setup() for M10/M20 for repeating AFC
 		}
+		else if(config.autoscan_enable) {
+			// Auto-scan holds the locked sonde on the scratch slot for norx_timeout
+			// (see loopDecoder); the return to scanning is driven solely by that timer.
+			// Don't cycle the channel list on a display timeout here -- otherwise the
+			// radio retunes and the display / livemap show the QRG channels being
+			// scanned during the hold window instead of the locked sonde.
+			action = ACT_NONE;
+		}
 		else {
 			if(action==ACT_NEXTSONDE||action==ACT_PREVSONDE)
 				nextRxSonde();
@@ -699,7 +707,7 @@ void Sonde::receive() {
 				nextRxFreq( action-64 );
 			action = ACT_SONDE(rxtask.currentSonde);
 		}
-		if(rxtask.activate==-1) {
+		if(rxtask.activate==-1 && action!=ACT_NONE) {
 			// race condition here. maybe better use mutex. TODO
 			rxtask.activate = ACT_SONDE(rxtask.currentSonde);
 		}
