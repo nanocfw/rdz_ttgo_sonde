@@ -853,6 +853,11 @@ const char *createLiveJson() {
   strcpy(ptr, "{\"sonde\": {");
   // use the same JSON format here as for MQTT and for the Android App
   sonde2json( ptr + strlen(ptr), 1024, s );
+  // Expose validPos so livemap can tell a fresh fix from a kept/old one (bit 0x80
+  // = "position is old"): a frame number can advance without a matching position
+  // (RS41 pos subframe CRC fail / all-zeros, DFM missed lat/lon block), and we must
+  // not plot that stale position under the newer frame number.
+  sprintf(ptr + strlen(ptr), ", \"validPos\": %d", s->d.validPos);
 #if 0
   sprintf(ptr + strlen(ptr), "\"sonde\": {\"rssi\": %d, \"vframe\": %d, \"time\": %d,\"id\": \"%s\", \"freq\": %3.3f, \"type\": \"%s\"",
           s->rssi, s->d.vframe, s->d.time, s->d.id, s->freq, sondeTypeStr[sonde.realType(s)]);

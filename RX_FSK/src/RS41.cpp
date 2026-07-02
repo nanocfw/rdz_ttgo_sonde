@@ -731,6 +731,15 @@ int RS41::decode41(byte *data, int maxlen)
 	int crcok = 1, serialok = 0;
 	SondeData *si = &(sonde.si()->d);
 
+	// Mark the position as not-yet-refreshed for this frame. posrs41() clears this
+	// (validPos = 0x7f) only when it decodes a genuinely fresh fix. If the '{' pos
+	// subframe fails its CRC (posrs41 is never called) or carries all-zeros, the
+	// 0x80 "position is old" flag survives -- so downstream consumers (live.json /
+	// livemap) can tell this frame's advanced frame number has no matching fresh
+	// position, and won't plot a stale position under a newer frame number. This
+	// only touches the 0x80 bit, not the VALIDPOS low bits used elsewhere.
+	if(si->validPos) si->validPos |= 0x80;
+
 	int32_t corr = reedsolomon41(data, 560, 131);  // try short frame first
 	if(corr<0) {
 		corr = reedsolomon41(data, 560, 230);  // try long frame
