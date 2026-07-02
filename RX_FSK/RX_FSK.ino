@@ -934,7 +934,7 @@ const char *createSpectrumJson() {
   // Auto-scan status (only when running in auto-scan mode)
   if (autoscanActive()) {
     ptr += sprintf(ptr, ",\"autoscan\":1,\"as_state\":\"%s\",\"as_npeaks\":%d",
-                   autoscanWebState ? "trial" : "sweep", autoscanWebNpeaks);
+                   (autoscanWebState == 2) ? "qrg" : (autoscanWebState ? "trial" : "sweep"), autoscanWebNpeaks);
     if (autoscanWebState && autoscanWebTryType >= 0 && autoscanWebTryType < NSondeTypes) {
       ptr += sprintf(ptr, ",\"as_tryfreq\":%.3f,\"as_trytype\":\"%s\"",
                      autoscanWebTryFreq, sondeTypeStr[autoscanWebTryType]);
@@ -1002,6 +1002,7 @@ struct st_configitems config_list[] = {
   {"autoscan_maxpeaks", 0, &sonde.config.autoscan_maxpeaks},
   {"autoscan_dwell", 0, &sonde.config.autoscan_dwell},
   {"autoscan_typedwell", 0, &sonde.config.autoscan_typedwell},
+  {"autoscan_qrgfirst", 0, &sonde.config.autoscan_qrgfirst},
   {"allowfileupload", 0, &sonde.config.allowfileupload},
   /* decoder settings */
   {"freqofs", 0, &sonde.config.freqofs},
@@ -3298,7 +3299,9 @@ static const SondeType AUTOSCAN_TYPES[] = {
 };
 #define AUTOSCAN_NTYPES ((int)(sizeof(AUTOSCAN_TYPES) / sizeof(AUTOSCAN_TYPES[0])))
 
-enum { AS_SWEEP, AS_TRIAL };
+// AS_QRG: try the active channel-list QRGs (configured freq+type) first, then the
+// spectrum sweep + per-peak trial. AS_QRG is only entered when autoscan_qrgfirst is set.
+enum { AS_QRG, AS_SWEEP, AS_TRIAL };
 static int asState = AS_SWEEP;
 static ScanPeak asPeaks[AUTOSCAN_MAXPK];
 static int asNpeaks = 0;
@@ -3307,13 +3310,23 @@ static int asTypeIdx = 0;
 static bool asTrialSetup = false;
 static unsigned long asTrialStart = 0;
 static unsigned long asNextSweep = 0;
+static int asQrgIdx = 0;              // index into the channel list during AS_QRG
+static bool asQrgSetup = false;       // radio tuned to the current QRG this cycle?
+static unsigned long asQrgStart = 0;  // millis() the current QRG trial began
+
+// QRG-first is active only when enabled AND there is at least one channel to try.
+static inline bool autoscanQrgFirst() {
+  return sonde.config.autoscan_qrgfirst != 0 && sonde.nSonde > 0;
+}
 
 static void autoscanReset() {
-  asState = AS_SWEEP;
+  asState = autoscanQrgFirst() ? AS_QRG : AS_SWEEP;
   asNpeaks = 0;
   asPeakIdx = asTypeIdx = 0;
   asTrialSetup = false;
   asNextSweep = 0;
+  asQrgIdx = 0;
+  asQrgSetup = false;
   autoscanWebState = 0;
   autoscanWebTryType = -1;
   autoscanWebNpeaks = 0;
@@ -3337,6 +3350,68 @@ void loopAutoScan() {
   sonde.dispsavectlOFF(0);
   bool dispOn = (disp.dispstate != 0);
 
+  if (asState == AS_QRG) {
+    // QRG-first: before sweeping for peaks, walk the active channel-list entries and
+    // try each on its own configured frequency+type. This catches known sondes whose
+    // signal is too weak to stand out as a spectrum peak. One channel per loop pass.
+    if (asNextSweep && (long)(millis() - asNextSweep) < 0) { delay(100); return; }  // brief pause between empty cycles
+    while (asQrgIdx < sonde.nSonde && !sonde.sondeList[asQrgIdx].active) asQrgIdx++;  // skip inactive channels
+    if (asQrgIdx >= sonde.nSonde) {                  // whole list tried, nothing locked -> sweep for peaks
+      asState = AS_SWEEP;
+      asNextSweep = 0;
+      asQrgIdx = 0; asQrgSetup = false;
+      autoscanWebState = 0;
+      return;
+    }
+
+    // Give each QRG the same budget one sonde type gets in the peak trial.
+    unsigned long perQrg = (sonde.config.autoscan_typedwell > 0)
+        ? (unsigned long)sonde.config.autoscan_typedwell
+        : (unsigned long)sonde.config.autoscan_dwell * 1000UL / AUTOSCAN_NTYPES;
+    if (perQrg < 1000UL) perQrg = 1000UL;
+
+    if (!asQrgSetup) {
+      SondeInfo *ch = &sonde.sondeList[asQrgIdx];
+      double fMHz = ch->freq;
+      int slot = autoscanSlot();                     // reuse the scratch slot, like the peak trial,
+      SondeInfo *si = &sonde.sondeList[slot];         // so the ST_DECODER handoff / autoLockGoodMs logic works
+      si->type = ch->type;
+      si->freq = fMHz;
+      si->active = 1;
+      rxtask.currentSonde = slot;
+      sonde.currentSonde = slot;
+      sonde.setup();
+      asQrgStart = millis();
+      asQrgSetup = true;
+      autoscanWebState = 2;                           // 2 = QRG phase (0=sweep, 1=peak trial)
+      autoscanWebTryFreq = fMHz;
+      autoscanWebTryType = ch->type;
+      LOG_I(TAG, "AutoScan: QRG %.3f MHz as %s\n", fMHz, sondeTypeStr[ch->type]);
+      if (dispOn) {
+        char buf[40];
+        snprintf(buf, sizeof(buf), "QRG %.3f %s", fMHz, sondeTypeStr[ch->type]);
+        disp.rdis->drawString(0, 0, buf);
+      }
+    }
+
+    uint16_t res = sonde.rxRawFrame();               // ~1 frame window; blocks here
+    if (res == RX_OK) {
+      SondeInfo *si = &sonde.sondeList[autoscanSlot()];
+      LOG_I(TAG, "AutoScan: LOCK (QRG) %.3f MHz as %s\n", si->freq, sondeTypeStr[si->type]);
+      autoLockGoodMs = millis();                      // start the no-signal timer fresh
+      sonde.dispsavectlON();
+      setCurrentDisplay(1);
+      enterMode(ST_DECODER, true);                    // hand off to the normal decoder
+      return;
+    }
+
+    if ((long)(millis() - asQrgStart) >= (long)perQrg) {  // no frame in budget -> next active channel
+      asQrgIdx++;
+      asQrgSetup = false;
+    }
+    return;
+  }
+
   if (asState == AS_SWEEP) {
     // Optional brief pause after a fruitless sweep so we don't spin uselessly.
     if (asNextSweep && (long)(millis() - asNextSweep) < 0) { delay(100); return; }
@@ -3353,8 +3428,11 @@ void loopAutoScan() {
     autoscanWebNpeaks = asNpeaks;
     LOG_I(TAG, "AutoScan: sweep found %d peaks\n", asNpeaks);
     if (asNpeaks == 0) {
-      asNextSweep = millis() + 1000UL;               // brief delay, then re-sweep
       autoscanWebState = 0;
+      if (autoscanQrgFirst()) {                        // re-check the QRG list next cycle
+        asState = AS_QRG; asQrgIdx = 0; asQrgSetup = false;
+      }
+      asNextSweep = millis() + 1000UL;                 // brief delay before the next cycle
       return;
     }
     asPeakIdx = 0; asTypeIdx = 0; asTrialSetup = false;
@@ -3365,8 +3443,13 @@ void loopAutoScan() {
 
   // AS_TRIAL: walk peaks (strongest first), trying each enabled type per peak.
   if (asPeakIdx >= asNpeaks) {
-    asState = AS_SWEEP;
-    asNextSweep = millis();                          // re-sweep immediately
+    if (autoscanQrgFirst()) {                         // start the next cycle with the QRG list
+      asState = AS_QRG; asQrgIdx = 0; asQrgSetup = false;
+      asNextSweep = 0;
+    } else {
+      asState = AS_SWEEP;
+      asNextSweep = millis();                         // re-sweep immediately
+    }
     autoscanWebState = 0;
     return;
   }

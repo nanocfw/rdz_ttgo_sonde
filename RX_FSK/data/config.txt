@@ -84,6 +84,7 @@ autoscan_quant=10000
 autoscan_maxpeaks=10
 autoscan_dwell=12
 autoscan_typedwell=0
+autoscan_qrgfirst=1
 #-------------------------------#
 # APRS settings
 #-------------------------------#

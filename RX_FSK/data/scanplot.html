@@ -260,6 +260,10 @@ async function poll() {
         banner.textContent = 'Auto-scan locked — receiving ' +
           (j.rxname ? ('"' + j.rxname + '" ') : '') + 'on ' +
           (j.rxfreq != null ? j.rxfreq.toFixed(3) : '?') + ' MHz.';
+      } else if (j.as_state === 'qrg') {
+        banner.textContent = 'Auto-scan: checking frequency list — ' +
+          (j.as_tryfreq != null ? j.as_tryfreq.toFixed(3) : '?') + ' MHz as ' +
+          (j.as_trytype || '?') + '.';
       } else if (j.as_state === 'trial') {
         banner.textContent = 'Auto-scan: trying ' +
           (j.as_tryfreq != null ? j.as_tryfreq.toFixed(3) : '?') + ' MHz as ' +
