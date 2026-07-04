@@ -1014,6 +1014,7 @@ struct st_configitems config_list[] = {
   /* decoder settings */
   {"freqofs", 0, &sonde.config.freqofs},
   {"lnaboost", 0, &sonde.config.lnaboost},
+  {"lnagain", 0, &sonde.config.lnagain},
   {"rs41.agcbw", 0, &sonde.config.rs41.agcbw},
   {"rs41.rxbw", 0, &sonde.config.rs41.rxbw},
   {"rs92.rxbw", 0, &sonde.config.rs92.rxbw},

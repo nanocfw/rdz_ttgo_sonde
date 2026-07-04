@@ -393,6 +393,7 @@ void Sonde::defaultConfig() {
 	config.marker=0;
 	config.freqofs=0;
 	config.lnaboost=1;	// most setups have no external LNA -> enable LNA current boost by default
+	config.lnagain=0;	// no external LNA gain correction by default
 	config.rs41.agcbw=12500;
 	config.rs41.rxbw=6300;
 	config.rs92.rxbw=12500;
