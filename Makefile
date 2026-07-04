@@ -58,7 +58,8 @@ image: buildfs ## Build the merged full-flash firmware-image.bin into $(OTA_DIR)
 	mv $(BUILD_DIR)/firmware-image.bin $(OTA_DIR)/firmware-image.bin
 	@echo "Full flash image: $(OTA_DIR)/firmware-image.bin"
 
-ota-version: ## Stamp RX_FSK/version.h with a fresh pu5wdz<timestamp> version_id
+ota-version: ## Stamp version.h: bump FS_MINOR if RX_FSK/data changed + fresh pu5wdz<timestamp> id
+	python3 scripts/ota_version.py fsbump RX_FSK/data
 	python3 scripts/ota_version.py bump
 
 # ota-version runs before build so the new version_id is compiled into the binary.

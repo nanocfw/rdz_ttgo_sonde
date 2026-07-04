@@ -14,6 +14,7 @@ Two subcommands, both driven by `make ota`:
 The version_id prefix is intentionally fixed to "pu5wdz" to identify this fork/server.
 """
 import argparse
+import hashlib
 import re
 import sys
 from datetime import datetime
@@ -25,6 +26,9 @@ PREFIX = "pu5wdz-"
 VERSION_ID_RE = re.compile(r'(const\s+char\s*\*\s*version_id\s*=\s*")([^"]*)(";)')
 FS_MAJOR_RE = re.compile(r'FS_MAJOR\s*=\s*(\d+)')
 FS_MINOR_RE = re.compile(r'FS_MINOR\s*=\s*(\d+)')
+# Baseline hash of the LittleFS source, stored as a comment in version.h so it stays
+# next to (and in sync with) FS_MINOR. Written/updated by the 'fsbump' subcommand.
+FSHASH_RE = re.compile(r'//\s*ota_fsdata_sha256:\s*([0-9a-fA-F]+)')
 
 
 def read_version_h():
@@ -59,12 +63,66 @@ def cmd_info(_args):
     print(f"{version_id}-{letter}{fs_minor}")
 
 
+def hash_data_dir(datadir):
+    """Deterministic hash of exactly the files that go into update.fs.bin.
+
+    Mirrors makefsupdate.py: the OTA archive contains only the TOP-LEVEL .js/.html/.css
+    files of RX_FSK/data (listdir is non-recursive and filtered by extension) -- not
+    subdirectories, fonts, screens, .txt or images. Those extras live in the full
+    LittleFS partition but are not OTA-deliverable, so a change to them is a manual
+    FS_MAJOR / re-flash decision, not an automatic FS_MINOR bump. Hash the same set,
+    sorted, so FS_MINOR bumps exactly when the online-updatable content changes.
+    Keep this selection in sync with scripts/makefsupdate.py."""
+    root = Path(datadir)
+    if not root.is_dir():
+        sys.exit(f"ota_version: data dir not found: {root}")
+    exts = (".js", ".html", ".css")
+    h = hashlib.sha256()
+    for f in sorted(p for p in root.iterdir() if p.is_file() and p.suffix in exts):
+        h.update(f.name.encode())
+        h.update(b"\0")
+        h.update(f.read_bytes())
+        h.update(b"\0")
+    return h.hexdigest()
+
+
+def cmd_fsbump(args):
+    """Increment FS_MINOR when the filesystem source changed since the recorded hash.
+
+    FS_MAJOR (filesystem-layout compatibility -> forces a USB re-flash) stays manual:
+    an incompatible layout change is a semantic decision a content diff can't infer.
+    The first run just records the baseline hash and does not bump.
+    """
+    text = read_version_h()
+    current = hash_data_dir(args.datadir)
+    m = FSHASH_RE.search(text)
+    if not m:
+        # First run: establish the baseline, do not bump.
+        if not text.endswith("\n"):
+            text += "\n"
+        VERSION_H.write_text(text + f"// ota_fsdata_sha256: {current}\n")
+        print(f"fs baseline recorded (no bump): {current[:12]}")
+        return
+    if m.group(1).lower() == current.lower():
+        print("fs unchanged (FS_MINOR kept)")
+        return
+    old_minor = int(find(FS_MINOR_RE, text, "FS_MINOR").group(1))
+    new_minor = old_minor + 1
+    text = re.sub(r'(FS_MINOR\s*=\s*)\d+', lambda mm: mm.group(1) + str(new_minor), text, count=1)
+    text = FSHASH_RE.sub(f"// ota_fsdata_sha256: {current}", text, count=1)
+    VERSION_H.write_text(text)
+    print(f"fs changed -> FS_MINOR {old_minor} -> {new_minor}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("bump", help="rewrite version_id to pu5wdz-<timestamp>").set_defaults(func=cmd_bump)
     sub.add_parser("info", help="print <version_id>-<Letter><Number>").set_defaults(func=cmd_info)
+    fsb = sub.add_parser("fsbump", help="bump FS_MINOR if the RX_FSK/data tree changed")
+    fsb.add_argument("datadir", help="LittleFS source dir (e.g. RX_FSK/data)")
+    fsb.set_defaults(func=cmd_fsbump)
     args = parser.parse_args()
     args.func(args)
 
