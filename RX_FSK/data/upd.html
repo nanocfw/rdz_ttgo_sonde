@@ -15,6 +15,13 @@
     .upd-section h2 { font-size: 18px; margin: 0 0 8px; }
     .upd-note { color: #777; font-size: 13px; line-height: 1.5; }
     .upd-url { padding: 6px 8px; box-sizing: border-box; max-width: 30em; }
+    /* Server-select radios. The shared ".system-info input:focus" rule (style.css)
+       adds a green box-shadow meant for text fields, which looks wrong on a radio;
+       reset it here and give the brand accent + a normal keyboard focus outline. */
+    #server-select label { cursor: pointer; }
+    #server-select input[type="radio"] { accent-color: #04AA6D; box-shadow: none; vertical-align: middle; }
+    #server-select input[type="radio"]:focus { box-shadow: none; outline: none; }
+    #server-select input[type="radio"]:focus-visible { outline: 2px solid #04AA6D; outline-offset: 2px; }
     /* Per-branch update status shown under the version in its table row. */
     .upd-status { display: block; font-size: 13px; margin-top: 3px; }
     .upd-ok   { color: #04AA6D; }
@@ -61,21 +68,44 @@
            online update to it is allowed (set by checkVersion()). -->
       <table class="status-table upd-version">
         <tr><td>Currently installed</td><td>%FULLNAMEID%</td></tr>
-        <tr><td>Available (main)</td><td>
+        <tr id="rowMain"><td>Available (main)</td><td>
           <span id="verMain">(&hellip;checking&hellip;)</span>
           <span id="stMain" class="upd-status"></span></td></tr>
-        <tr><td>Available (dev2)</td><td>
+        <tr id="rowDev2"><td>Available (dev2)</td><td>
           <span id="verDev2">(&hellip;checking&hellip;)</span>
           <span id="stDev2" class="upd-status"></span></td></tr>
+        <tr id="rowPu5wdz"><td>Available (PU5WDZ)</td><td>
+          <span id="verPu5wdz">(&hellip;checking&hellip;)</span>
+          <span id="stPu5wdz" class="upd-status"></span></td></tr>
       </table>
 
-      <!-- Online update: pulls from rdzsonde.org over the device's WiFi. Each button is
-           enabled/disabled by checkVersion() based on the suffix comparison. -->
-      <form class="upd-section" action="update.html" method="post">
+      <!-- Update server selector. Chooses which host the device downloads from; the
+           choice is remembered in localStorage (applyServer). Official uses the built-in
+           rdzsonde.org main/dev2 branches; PU5WDZ uses rdzttgo.nano.dev.br (single build).
+           The download host itself is set in firmware (handleUpdatePost) by the button name. -->
+      <div class="upd-section" id="server-select">
+        <h2>Update server</h2>
+        <label><input type="radio" name="updserver" value="official" checked>
+          Official (rdzsonde.org)</label>
+        &nbsp;&nbsp;
+        <label><input type="radio" name="updserver" value="pu5wdz">
+          PU5WDZ (rdzttgo.nano.dev.br)</label>
+      </div>
+
+      <!-- Online update (official): pulls from rdzsonde.org over the device's WiFi. Each
+           button is enabled/disabled by checkVersion() based on the suffix comparison. -->
+      <form class="upd-section" id="online-official" action="update.html" method="post">
         <h2>Online update</h2>
         <p class="upd-note">Requires the device to have Internet access via WiFi.</p>
         <input class="updbtn" id="btnMain" type="submit" name="main" value="Update from Main">
         <input class="updbtn" id="btnDev2" type="submit" name="dev2" value="Update from Dev2">
+      </form>
+
+      <!-- Online update (PU5WDZ): single flat build served from rdzttgo.nano.dev.br. -->
+      <form class="upd-section" id="online-pu5wdz" action="update.html" method="post">
+        <h2>Online update</h2>
+        <p class="upd-note">Downloads from rdzttgo.nano.dev.br over the device's WiFi.</p>
+        <input class="updbtn" id="btnPu5wdz" type="submit" name="pu5wdz" value="Update from PU5WDZ">
       </form>
 
       <!-- Local update from a URL (developer feature; hidden unless enabled) -->
@@ -147,11 +177,21 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // On a real device the page is served from the device's IP and pulls version info
-// from the public update server. Under the local preview server (localhost, or its
+// from the selected update server. Under the local preview server (localhost, or its
 // :8099 port) the same paths are mocked, so fetch them same-origin.
 const isPreview = location.hostname === "localhost" ||
                   location.hostname === "127.0.0.1" || location.port === "8099";
-const UPD_HOST = isPreview ? "" : "http://rdzsonde.org";
+// Base URL for the browser's version check, per selected server. This is only the
+// UI version fetch — the device itself downloads the firmware over http (no TLS),
+// see handleUpdatePost/execOTA. The PU5WDZ server redirects http->https for
+// everything except the .bin files, and a redirect response carries no CORS header,
+// so fetch its update-info.html over https directly (the browser can do TLS; going
+// from an http page to https is allowed, unlike the reverse).
+function hostFor(server) {
+  if (isPreview) return "";
+  return server === "pu5wdz" ? "https://rdzttgo.nano.dev.br" : "http://rdzsonde.org";
+}
+const SERVER_KEY = "rdzUpdateServer";   // localStorage key remembering the last choice
 
 // Version strings look like <version_id>-<Letter><Number> (Letter=filesystem major,
 // Number=filesystem minor). The suffix is the final '-' token.
@@ -178,10 +218,12 @@ function classify(avail) {
   return { ok: true, level: "upd-ok", msg: "✓ Up to date — applies fully" };
 }
 
-// Fetch an "available version" string, show it, set its status, and gate its button.
-function checkVersion(branch, verEl, stEl, btn) {
+// Fetch an "available version" string from a full URL, show it, set its status, and
+// gate its button. Used for both the official main/dev2 branches and the flat PU5WDZ
+// build (whose update-info.html sits at the server root).
+function checkVersionUrl(url, verEl, stEl, btn) {
   let req = new XMLHttpRequest();
-  req.open("GET", UPD_HOST + "/" + branch + "/update-info.html");
+  req.open("GET", url);
   req.onload = () => {
     let avail = req.response.replace(/<[^>]*>/g, "").trim();
     verEl.textContent = avail || "(unknown)";
@@ -196,10 +238,43 @@ function checkVersion(branch, verEl, stEl, btn) {
   };
   req.send();
 }
-checkVersion("main", document.getElementById("verMain"),
-             document.getElementById("stMain"), document.getElementById("btnMain"));
-checkVersion("dev2", document.getElementById("verDev2"),
-             document.getElementById("stDev2"), document.getElementById("btnDev2"));
+
+// Show the rows/forms for the chosen server, remember the choice, and (re)run the
+// version check(s) for whatever is now visible.
+function applyServer(server) {
+  const isPu = server === "pu5wdz";
+  document.getElementById("rowMain").style.display   = isPu ? "none" : "";
+  document.getElementById("rowDev2").style.display   = isPu ? "none" : "";
+  document.getElementById("rowPu5wdz").style.display = isPu ? "" : "none";
+  document.getElementById("online-official").style.display = isPu ? "none" : "";
+  document.getElementById("online-pu5wdz").style.display   = isPu ? "" : "none";
+  const r = document.querySelector('input[name=updserver][value="' + server + '"]');
+  if (r) r.checked = true;
+  try { localStorage.setItem(SERVER_KEY, server); } catch (e) { /* private mode */ }
+
+  if (isPu) {
+    // PU5WDZ is a single flat build: update-info.html lives at the server root.
+    checkVersionUrl(hostFor("pu5wdz") + "/update-info.html",
+      document.getElementById("verPu5wdz"),
+      document.getElementById("stPu5wdz"),
+      document.getElementById("btnPu5wdz"));
+  } else {
+    checkVersionUrl(hostFor("official") + "/main/update-info.html",
+      document.getElementById("verMain"),
+      document.getElementById("stMain"), document.getElementById("btnMain"));
+    checkVersionUrl(hostFor("official") + "/dev2/update-info.html",
+      document.getElementById("verDev2"),
+      document.getElementById("stDev2"), document.getElementById("btnDev2"));
+  }
+}
+
+// Restore the last-used server (default official) and wire the radio buttons.
+let savedServer = "official";
+try { savedServer = localStorage.getItem(SERVER_KEY) || "official"; } catch (e) { /* ignore */ }
+if (savedServer !== "official" && savedServer !== "pu5wdz") savedServer = "official";
+applyServer(savedServer);
+document.querySelectorAll('input[name=updserver]').forEach(radio =>
+  radio.addEventListener("change", () => applyServer(radio.value)));
 
 // Intercept the online / local-URL update forms: confirm, POST in the background,
 // then show a progress dialog that polls for the reboot and reloads. Submitting

@@ -101,11 +101,17 @@ PMU *pmu = NULL;
 SemaphoreHandle_t axpSemaphore;
 extern uint8_t pmu_irq;
 
-const char *updateHost = "rdzsonde.org";
+// Selectable update servers (the download host lives here, not in the browser).
+// The web update page (upd.html) picks one via the POST button name; handleUpdatePost
+// sets updateHost/updatePort/updatePrefix accordingly before entering ST_UPDATE.
+const char *updateHostOfficial = "rdzsonde.org";        // main/dev2 branches
+const char *updateHostPu5wdz   = "rdzttgo.nano.dev.br"; // single flat build (prefix "/")
+const char *updateHost = updateHostOfficial;            // active host for execOTA()
 int updatePort = 80;
 
 const char *updatePrefixM = "/main/";
 const char *updatePrefixD = "/dev2/";
+const char *updatePrefixP = "/";                        // pu5wdz flat layout
 const char *updatePrefix = updatePrefixM;
 const char *updateFs = "update.fs.bin";
 const char *updateIno = "update.ino.bin";
@@ -1590,11 +1596,21 @@ const char *handleUpdatePost(AsyncWebServerRequest * request) {
     Serial.println(param.c_str());
     if (param.equals("dev2")) {
       Serial.println("equals devel");
+      updateHost = updateHostOfficial;
+      updatePort = 80;
       updatePrefix = updatePrefixD;
     }
     else if (param.equals("main")) {
       Serial.println("equals main");
+      updateHost = updateHostOfficial;
+      updatePort = 80;
       updatePrefix = updatePrefixM;
+    }
+    else if (param.equals("pu5wdz")) {
+      Serial.println("equals pu5wdz");
+      updateHost = updateHostPu5wdz;
+      updatePort = 80;
+      updatePrefix = updatePrefixP;
     }
     else if (localUpdates && param.equals("local")) {
       // Local updates permitted. Expect URL as url parameter...

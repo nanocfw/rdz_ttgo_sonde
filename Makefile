@@ -23,7 +23,12 @@ BUILD_DIR := .pio/build/ttgo-lora32
 OTA_DIR   := $(BUILD_DIR)/ota
 
 .DEFAULT_GOAL := build
-.PHONY: build upload uploadfs buildfs uploadfonts monitor image ota clean help
+.PHONY: build upload uploadfs buildfs uploadfonts monitor image ota ota-version ota-serve ota-stop clean help
+
+# OTA HTTP server (nginx in Docker, see ota-server/). Serves $(OTA_DIR) on port 80.
+OTA_IMAGE     ?= rdz-ota
+OTA_CONTAINER ?= rdz-ota
+OTA_PORT      ?= 80
 
 build: ## Compile firmware
 	$(PIO) run
@@ -47,13 +52,30 @@ image: buildfs ## Build the merged single-file firmware-image.bin (bootloader+pa
 	$(MERGE_PATH) $(PIO) run --target firmware
 	@echo "Merged image: .pio/build/ttgo-lora32/firmware-image.bin"
 
-ota: build ## Build OTA artifacts (update.ino.bin + update.fs.bin) into .pio/build/ttgo-lora32/ota
+ota-version: ## Stamp RX_FSK/version.h with a fresh pu5wdz<timestamp> version_id
+	python3 scripts/ota_version.py bump
+
+# ota-version runs before build so the new version_id is compiled into the binary.
+ota: ota-version build ## Build OTA artifacts (update.ino.bin + update.fs.bin + update-info.html)
 	mkdir -p $(OTA_DIR)
 	cp $(BUILD_DIR)/firmware.bin $(OTA_DIR)/update.ino.bin
 	python3 scripts/makefsupdate.py RX_FSK/data > $(OTA_DIR)/update.fs.bin
+	python3 scripts/ota_version.py info > $(OTA_DIR)/update-info.html
 	@echo "OTA artifacts in $(OTA_DIR):"
-	@echo "  update.ino.bin (app)  +  update.fs.bin (.js/.html/.css)"
-	@echo "Serve this dir over HTTP and point the web Local-Update button at it."
+	@echo "  update.ino.bin (app)  +  update.fs.bin (data)  +  update-info.html ($$(cat $(OTA_DIR)/update-info.html))"
+	@echo "Serve this dir over HTTP (make ota-serve) or deploy it to your OTA server."
+
+ota-serve: ## Build & start the nginx OTA server (serves $(OTA_DIR) on OTA_PORT, default 80)
+	@[ -f $(OTA_DIR)/update.ino.bin ] || { echo "No OTA artifacts in $(OTA_DIR) — run 'make ota' first."; exit 1; }
+	docker build -t $(OTA_IMAGE) ota-server
+	docker rm -f $(OTA_CONTAINER) 2>/dev/null || true
+	docker run -d --name $(OTA_CONTAINER) -p $(OTA_PORT):80 \
+		-v "$(CURDIR)/$(OTA_DIR):/usr/share/nginx/html:ro" $(OTA_IMAGE)
+	@echo "OTA server up on http://localhost:$(OTA_PORT)/  (serving $(OTA_DIR))"
+
+ota-stop: ## Stop and remove the nginx OTA server container
+	docker rm -f $(OTA_CONTAINER) 2>/dev/null || true
+	@echo "OTA server stopped."
 
 clean: ## Remove build artifacts
 	$(PIO) run --target clean
