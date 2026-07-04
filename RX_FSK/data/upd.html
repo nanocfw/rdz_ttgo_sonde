@@ -223,7 +223,7 @@ function classify(avail) {
     return { ok: false, level: "upd-warn", msg: "✗ Update available — incompatible filesystem (" +
              insSuf.letter + "→" + av.letter + "), USB re-flash required" };
   if (av.number !== insSuf.number)
-    return { ok: true, level: "upd-info", msg: "↑ Update available — filesystem changes (" +
+    return { ok: true, level: "upd-avail", msg: "↑ Update available — filesystem changes (" +
              insSuf.raw + "→" + av.raw + "), safe to apply online" };
   return { ok: true, level: "upd-avail", msg: "↑ Update available — applies fully" };
 }
