@@ -24,9 +24,10 @@
     #server-select input[type="radio"]:focus-visible { outline: 2px solid #04AA6D; outline-offset: 2px; }
     /* Per-branch update status shown under the version in its table row. */
     .upd-status { display: block; font-size: 13px; margin-top: 3px; }
-    .upd-ok   { color: #04AA6D; }
-    .upd-info { color: #555; }
-    .upd-warn { color: #b00; }
+    .upd-ok    { color: #04AA6D; }   /* up to date (green) */
+    .upd-avail { color: #1e88e5; }   /* update available (blue) */
+    .upd-info  { color: #555; }
+    .upd-warn  { color: #b00; }
     .updbtn {
       background-color: #04AA6D; color: #fff; border: none; border-radius: 5px;
       padding: 9px 22px; font-size: 14px; cursor: pointer; margin: 4px 6px 4px 0;
@@ -202,20 +203,29 @@ function suffixOf(id) {
 }
 const insSuf = suffixOf(installed);
 
-// Decide whether an online update to `avail` may be applied, and explain why.
-// Letter differs  -> filesystem layout incompatible, USB re-flash required (block).
-// Number differs  -> filesystem content changed but safe to apply online (allow).
-// Identical        -> applies fully (allow). Unknown -> allow (can't validate).
+// Two independent questions:
+//  1) Freshness: is a new version available? Compare the FULL version string
+//     (version_id + suffix), NOT just the filesystem suffix -- otherwise two
+//     different builds sharing the same FS version look "up to date".
+//  2) Compatibility (only relevant once a new version exists), from the suffix:
+//     Letter differs -> FS layout incompatible, USB re-flash required (block).
+//     Number differs -> FS content changed but safe to apply online (allow).
+//     Same suffix    -> applies fully (allow).
+// Unknown/unparseable available version -> allow (can't validate).
 function classify(avail) {
+  avail = (avail || "").trim();
   let av = suffixOf(avail);
   if (!insSuf || !av) return { ok: true, level: "upd-info", msg: "" };
+  if (avail === installed)
+    return { ok: true, level: "upd-ok", msg: "✓ Up to date" };
+  // A different version is available -- qualify how it can be applied.
   if (av.letter !== insSuf.letter)
-    return { ok: false, level: "upd-warn", msg: "✗ Incompatible filesystem (" +
-             insSuf.letter + "→" + av.letter + ") — USB re-flash required" };
+    return { ok: false, level: "upd-warn", msg: "✗ Update available — incompatible filesystem (" +
+             insSuf.letter + "→" + av.letter + "), USB re-flash required" };
   if (av.number !== insSuf.number)
-    return { ok: true, level: "upd-info", msg: "Filesystem changes (" + insSuf.raw +
-             "→" + av.raw + ") — safe to apply online" };
-  return { ok: true, level: "upd-ok", msg: "✓ Up to date — applies fully" };
+    return { ok: true, level: "upd-info", msg: "↑ Update available — filesystem changes (" +
+             insSuf.raw + "→" + av.raw + "), safe to apply online" };
+  return { ok: true, level: "upd-avail", msg: "↑ Update available — applies fully" };
 }
 
 // Fetch an "available version" string from a full URL, show it, set its status, and
