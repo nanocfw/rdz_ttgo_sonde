@@ -20,7 +20,11 @@ MERGE_PATH := PATH=$(PENV_BIN):$$PATH
 
 # Build artifact locations (PlatformIO env is ttgo-lora32, see platformio.ini).
 BUILD_DIR := .pio/build/ttgo-lora32
-OTA_DIR   := $(BUILD_DIR)/ota
+# Assemble OTA artifacts OUTSIDE .pio/build: PlatformIO recreates its build tree,
+# which swaps the directory's inode. A Docker bind mount pins the inode at container
+# start, so a swapped dir orphans the ota-serve mount (404 until restart). Keeping
+# this dir stable and writing files in place keeps the running container in sync.
+OTA_DIR   := ota-dist
 
 .DEFAULT_GOAL := build
 .PHONY: build upload uploadfs buildfs uploadfonts monitor image ota ota-version ota-serve ota-stop clean help
@@ -48,9 +52,11 @@ uploadfonts: ## Flash the fonts partition (only when a separate fonts partition 
 monitor: ## Open the serial monitor (115200 baud)
 	$(PIO) run --target monitor
 
-image: buildfs ## Build the merged single-file firmware-image.bin (bootloader+partitions+app+fonts+fs)
+image: buildfs ## Build the merged full-flash firmware-image.bin into $(OTA_DIR) (for USB re-flash downloads)
 	$(MERGE_PATH) $(PIO) run --target firmware
-	@echo "Merged image: .pio/build/ttgo-lora32/firmware-image.bin"
+	mkdir -p $(OTA_DIR)
+	mv $(BUILD_DIR)/firmware-image.bin $(OTA_DIR)/firmware-image.bin
+	@echo "Full flash image: $(OTA_DIR)/firmware-image.bin"
 
 ota-version: ## Stamp RX_FSK/version.h with a fresh pu5wdz<timestamp> version_id
 	python3 scripts/ota_version.py bump
@@ -58,7 +64,7 @@ ota-version: ## Stamp RX_FSK/version.h with a fresh pu5wdz<timestamp> version_id
 # ota-version runs before build so the new version_id is compiled into the binary.
 ota: ota-version build ## Build OTA artifacts (update.ino.bin + update.fs.bin + update-info.html)
 	mkdir -p $(OTA_DIR)
-	cp $(BUILD_DIR)/firmware.bin $(OTA_DIR)/update.ino.bin
+	mv $(BUILD_DIR)/firmware.bin $(OTA_DIR)/update.ino.bin
 	python3 scripts/makefsupdate.py RX_FSK/data > $(OTA_DIR)/update.fs.bin
 	python3 scripts/ota_version.py info > $(OTA_DIR)/update-info.html
 	@echo "OTA artifacts in $(OTA_DIR):"
