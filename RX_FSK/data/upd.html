@@ -233,6 +233,10 @@ function classify(avail) {
 // build (whose update-info.html sits at the server root).
 function checkVersionUrl(url, verEl, stEl, btn) {
   let req = new XMLHttpRequest();
+  // Cache-bust: without this the browser serves update-info.html from disk cache
+  // and reports a stale "available version". A query param (rather than a
+  // Cache-Control header) avoids triggering a CORS preflight on the cross-origin fetch.
+  url += (url.indexOf("?") >= 0 ? "&" : "?") + "_=" + (new Date()).getTime();
   req.open("GET", url);
   req.onload = () => {
     let avail = req.response.replace(/<[^>]*>/g, "").trim();
