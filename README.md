@@ -67,7 +67,8 @@ Summary by area:
   device reboot.
 - Clickable flight-path trail: opens a popup with that point's position, altitude,
   speed + direction, climb, signal (dBm) and GPS time.
-- "Topo" (topographic-map.com) link in popups, alongside GMaps/OSM/GeoApp.
+- Extra popup links, alongside GMaps/OSM/GeoApp: a "Topo" (topographic-map.com) link and
+  a "Route" link (Google Maps driving directions from the receiver to the point).
 - Shows the RS41 power-off (kill-timer) time; timestamps rendered in the browser's local
   timezone.
 - Does not plot a stale position when the frame counter advances without a fresh GPS fix.

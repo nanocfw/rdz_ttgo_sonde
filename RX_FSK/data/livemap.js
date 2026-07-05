@@ -434,10 +434,24 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
     return lon;
   }  
 
+  // Receiver position for the "Route" link: prefer the live GPS fix, else fall back to
+  // the configured/served map center (posInfo). Returns [lat, lon] or null.
+  receiverpos = function() {
+    if (typeof gps_location !== 'undefined' && gps_location && gps_location.length == 2) { return gps_location; }
+    if (typeof mapcenter !== 'undefined' && mapcenter && mapcenter.length == 2) { return mapcenter; }
+    return null;
+  };
+
   // "Open in <external map>" link row, shared by the sonde/predict popups and the
-  // trail-point popup (line_click) so all four links stay defined in one place.
+  // trail-point popup (line_click) so all links stay defined in one place.
   openlinks = function(lat, lon) {
-    return '<b>Open:</b> <a href="https://www.google.de/maps/?q='+lat+', '+lon+'" target="_blank">GMaps</a> | <a href="https://www.openstreetmap.org/?mlat='+lat+'&mlon='+lon+'&zoom=15" target="_blank">OSM</a> | <a href="https://topographic-map.com/world/?popup='+lat+','+lon+'&center='+lat+','+lon+'&zoom=15&base=5" target="_blank">Topo</a> | <a href="geo://'+lat+','+lon+'">GeoApp</a>';
+    var links = '<b>Open:</b> <a href="https://www.google.de/maps/?q='+lat+', '+lon+'" target="_blank">GMaps</a> | <a href="https://www.openstreetmap.org/?mlat='+lat+'&mlon='+lon+'&zoom=15" target="_blank">OSM</a> | <a href="https://topographic-map.com/world/?popup='+lat+','+lon+'&center='+lat+','+lon+'&zoom=15&base=5" target="_blank">Topo</a> | <a href="geo://'+lat+','+lon+'">GeoApp</a>';
+    // Driving route from the receiver to this point (needs a known receiver position).
+    var rx = receiverpos();
+    if (rx) {
+      links += ' | <a href="https://www.google.de/maps/dir/'+rx[0]+','+rx[1]+'/'+lat+','+lon+'" target="_blank">Route</a>';
+    }
+    return links;
   };
 
   // Popup content for a clicked trail point, built from that point's stored frame
