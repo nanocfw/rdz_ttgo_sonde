@@ -43,6 +43,72 @@ Adding support for LMS6 (see issue #48) and ims100 (see branch ims100) could be 
 but currently I don't have plans to do add this myself. Well-tested pull requests will of
 course be considered for inclusion :-).
 
+## Enhancements in this fork (PU5WDZ)
+
+This fork (version id `pu5wdz-*`) extends the upstream firmware with a reworked,
+multi-user web interface, an auto_rx-style scanner, a browser spectrum plot, richer
+live-map tooling, external-LNA support and a large round of reliability hardening.
+Summary by area:
+
+### Web interface & security
+- Multi-user authentication: stateless JWT sessions with device-key–hashed passwords,
+  per-user access levels (admin/level-2 gates actions such as SD-card format), anonymous
+  access derived from the user count, and a sliding idle-session timeout.
+- Login returns you to the last page/tab and survives a device reboot.
+- User-management UI (add/edit/delete users, confirm-password field), header user menu,
+  and tabs shown only for your access level.
+- Modernized, consistent input/form styling across all pages, redesigned dialogs, and a
+  version-info footer.
+- Upload/download of `config.txt` and `qrg.txt`, plus confirmation and reboot-aware
+  progress dialogs for destructive actions (Format SD, Reboot).
+
+### Live map
+- Restores the last sonde and its flight track from browser session storage after a
+  device reboot.
+- Clickable flight-path trail: opens a popup with that point's position, altitude,
+  speed + direction, climb, signal (dBm) and GPS time.
+- "Topo" (topographic-map.com) link in popups, alongside GMaps/OSM/GeoApp.
+- Shows the RS41 power-off (kill-timer) time; timestamps rendered in the browser's local
+  timezone.
+- Does not plot a stale position when the frame counter advances without a fresh GPS fix.
+
+### Spectrum scan-plot (web)
+- New browser spectrum page fed by the radio's idle sweeps (only while a browser is
+  watching; the first sweep runs immediately).
+- Crosshair readout of frequency/power, frequency zoom & pan, touch-drag, configured
+  noise-floor and signal-threshold lines, and native-resolution rendering.
+
+### Auto-scan (auto_rx-style)
+- Finds sondes on spectrum peaks and tries active frequency-list QRGs before those peaks.
+- Configurable scan dwell, iteration count and per-sonde-type decode time; decimal start
+  frequencies (e.g. `400.2`); an exclusion list for known noise frequencies; and holds
+  the locked sonde's frequency instead of scanning away.
+
+### OTA / firmware updates
+- Redesigned update page that validates online updates by filesystem version, with
+  reboot-aware progress dialogs.
+- Upload firmware and filesystem images directly from the update page.
+- Optional PU5WDZ update server plus self-hosted server tooling; `FS_MINOR` auto-bumps
+  when the filesystem image content changes; artifacts served from a stable `ota-dist`.
+
+### Receiver / decoding
+- Internal LNA-boost configuration (SX1278 receiver gain).
+- External LNA support: reported RSSI corrected by subtracting the configured external
+  LNA gain.
+- Decoder fixes for M10/M20 (FEC buffer reset on retune, frame-length clamp), MP3H, RS41
+  and DFM.
+- SondeHub: reports measured frequency plus RS41 `tx_frequency`/mainboard firmware.
+
+### Reliability & hardening
+- Extensive buffer-bounds and null-check hardening across display, APRS, SondeHub, Wi-Fi,
+  config/qrg parsing, GPS/NMEA, GPX export and OTA paths, to prevent overflows and crashes
+  under low heap.
+
+### Tooling & build
+- `Makefile` wrapping the common PlatformIO targets.
+- Web-UI preview server (`scripts/preview_server.py`) for editing pages without hardware.
+- The `ttgoconfig` desktop/CLI flasher gains authentication support (`--user`/`--pass`).
+
 ## Installation
 
 You can download the latest binary automated build for the development and testing branches [here](http://rdzsonde.org/download.html), the binary includes everything including configuration files so any existing settings will be reset. 
