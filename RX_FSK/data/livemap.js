@@ -543,10 +543,28 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
   session_storage = storage_read();
   if (session_storage) {
     session_storage.forEach(function(d) {
-      dots.push([d.lat,d.lon,d.alt]);
+      // Rebuild the flight track keyed by sonde id, mirroring draw()'s plot guard
+      // (valid lat/lon/alt, not a stale/kept position). Keying by id -- not a flat
+      // dots.push() -- matches how draw() stores/reads the track (dots[data.id]),
+      // so the restored trail is actually drawn.
+      if (d.id && d.lat && d.lon && d.alt && !(d.validPos & 0x80)) {
+        if (!dots[d.id]) { dots[d.id] = []; }
+        dots[d.id].push([d.lat,d.lon,d.alt]);
+      }
       session_storage_last = d;
     });
-    draw(session_storage_last);
+    for (var sid in dots) {
+      if (!line[sid]) { line[sid] = L.polyline(dots[sid]).addTo(map); }
+    }
+    if (session_storage_last) {
+      // Prime lastframe so draw()'s plot guard (lastframe != 0, line ~197) passes on
+      // this single restore call -- otherwise the marker is never created and the
+      // sonde kept in session storage isn't shown after a reboot. Use -1 (nonzero and
+      // != the frame's own vframe) so headtxt() still populates the header, then resets
+      // lastframe to the real vframe.
+      lastframe = -1;
+      draw(session_storage_last);
+    }
   }
 
   setInterval(get_data,1000);
