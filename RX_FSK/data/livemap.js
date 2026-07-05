@@ -443,7 +443,7 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
 
     var add =
     '<br /><b>Position:</b> '+lat+',  '+lon+'<br />'+
-    '<b>Open:</b> <a href="https://www.google.de/maps/?q='+lat+', '+lon+'" target="_blank">GMaps</a> | <a href="https://www.openstreetmap.org/?mlat='+lat+'&mlon='+lon+'&zoom=15" target="_blank">OSM</a> | <a href="geo://'+lat+','+lon+'">GeoApp</a>';
+    '<b>Open:</b> <a href="https://www.google.de/maps/?q='+lat+', '+lon+'" target="_blank">GMaps</a> | <a href="https://www.openstreetmap.org/?mlat='+lat+'&mlon='+lon+'&zoom=15" target="_blank">OSM</a> | <a href="https://topographic-map.com/world/?popup='+lat+','+lon+'&center='+lat+','+lon+'&zoom=15&base=5" target="_blank">Topo</a> | <a href="geo://'+lat+','+lon+'">GeoApp</a>';
 
     if (t == 'position') {
       // RS41 shutdown ("kill") timer: countKT = seconds until power-off as of
