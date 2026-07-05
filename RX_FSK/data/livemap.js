@@ -210,8 +210,8 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
         }
         if (!dots[data.id]) { dots[data.id] = []; }
         dots[data.id].push(location);
-        if (!line[data.id]) { 
-          line[data.id] = L.polyline(dots[data.id]).addTo(map);
+        if (!line[data.id]) {
+          line[data.id] = L.polyline(dots[data.id], {sondeid: data.id}).addTo(map).on('click', line_click);
         } else {
           line[data.id].setLatLngs(dots[data.id]);
         }
@@ -434,6 +434,49 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
     return lon;
   }  
 
+  // "Open in <external map>" link row, shared by the sonde/predict popups and the
+  // trail-point popup (line_click) so all four links stay defined in one place.
+  openlinks = function(lat, lon) {
+    return '<b>Open:</b> <a href="https://www.google.de/maps/?q='+lat+', '+lon+'" target="_blank">GMaps</a> | <a href="https://www.openstreetmap.org/?mlat='+lat+'&mlon='+lon+'&zoom=15" target="_blank">OSM</a> | <a href="https://topographic-map.com/world/?popup='+lat+','+lon+'&center='+lat+','+lon+'&zoom=15&base=5" target="_blank">Topo</a> | <a href="geo://'+lat+','+lon+'">GeoApp</a>';
+  };
+
+  // Popup content for a clicked trail point, built from that point's stored frame
+  // (see line_click). Each field is guarded so partial frames still render.
+  trailpoptxt = function(f) {
+    var lat = Math.round(f.lat * 1000000) / 1000000;
+    var lon = Math.round(sanitize_lon(f.lon) * 1000000) / 1000000;
+    var rows = '<b>Position:</b> '+lat+',  '+lon+'<br />';
+    if (f.alt || f.alt === 0)     { rows += '<b>Altitude:</b> '+mr(f.alt)+' m<br />'; }
+    if (f.speed || f.speed === 0) { rows += '<b>Speed:</b> '+(mr(f.speed * 3.6 * 10) / 10)+' km/h'+((f.dir || f.dir === 0) ? ' '+f.dir+'°' : '')+'<br />'; }
+    if (f.climb || f.climb === 0) { rows += '<b>Climb:</b> '+f.climb+' m/s<br />'; }
+    if (f.rssi || f.rssi === 0)   { rows += '<b>Signal:</b> -'+(f.rssi / 2)+' dBm<br />'; }
+    // f.time = the frame's GPS timestamp (when the sonde was at this point).
+    if (f.time) { rows += '<b>Time:</b> '+localtime(f.time)+'<br />'; }
+    return '<div class="i_position"><b>〰️ Trail point</b><br />'+rows+openlinks(lat,lon)+'</div>';
+  };
+
+  // Trail (polyline) click handler. e.latlng is the raw clicked coordinate; find the
+  // stored frame nearest to it -- for the sonde whose trail was clicked (options.sondeid)
+  // -- and show its telemetry. Session storage is the per-frame source of truth, so this
+  // works for both the live trail and a trail restored after reboot.
+  line_click = function(e) {
+    var id = e.target.options.sondeid;
+    var frames = storage_read();
+    if (!frames) { return; }
+    var best = null, bestd = Infinity;
+    frames.forEach(function(f) {
+      if (f.id == id && f.lat && f.lon) {
+        var d = e.latlng.distanceTo(L.latLng(f.lat, f.lon));
+        if (d < bestd) { bestd = d; best = f; }
+      }
+    });
+    if (!best) { return; }
+    L.popup({closeOnClick:true, autoPan:false})
+      .setLatLng(L.latLng(best.lat, best.lon))
+      .setContent(trailpoptxt(best))
+      .openOn(map);
+  };
+
   poptxt = function(t,i,id) {
     var lat_input = (i.id)?i.lat:i.latitude;
     var lon_input = sanitize_lon((i.id)?i.lon:i.longitude);
@@ -442,8 +485,7 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
     var lon = Math.round(lon_input * 1000000) / 1000000;
 
     var add =
-    '<br /><b>Position:</b> '+lat+',  '+lon+'<br />'+
-    '<b>Open:</b> <a href="https://www.google.de/maps/?q='+lat+', '+lon+'" target="_blank">GMaps</a> | <a href="https://www.openstreetmap.org/?mlat='+lat+'&mlon='+lon+'&zoom=15" target="_blank">OSM</a> | <a href="https://topographic-map.com/world/?popup='+lat+','+lon+'&center='+lat+','+lon+'&zoom=15&base=5" target="_blank">Topo</a> | <a href="geo://'+lat+','+lon+'">GeoApp</a>';
+    '<br /><b>Position:</b> '+lat+',  '+lon+'<br />'+openlinks(lat,lon);
 
     if (t == 'position') {
       // RS41 shutdown ("kill") timer: countKT = seconds until power-off as of
@@ -554,7 +596,7 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
       session_storage_last = d;
     });
     for (var sid in dots) {
-      if (!line[sid]) { line[sid] = L.polyline(dots[sid]).addTo(map); }
+      if (!line[sid]) { line[sid] = L.polyline(dots[sid], {sondeid: sid}).addTo(map).on('click', line_click); }
     }
     if (session_storage_last) {
       // Prime lastframe so draw()'s plot guard (lastframe != 0, line ~197) passes on
