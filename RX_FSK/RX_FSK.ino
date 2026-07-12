@@ -2303,9 +2303,6 @@ int fetchWifiIndex(const char *id) {
       return i;
     }
     //LOG_D(TAG, "No match: '%s' vs '%s'\n", id, networks[i].id.c_str());
-    const char *cfgid = networks[i].id.c_str();
-    int len = strlen(cfgid);
-    if (strlen(id) > len) len = strlen(id);
   }
   return -1;
 }
@@ -3583,7 +3580,7 @@ const char *translateEncryptionType(wifi_auth_mode_t encryptionType) {
 // in core.h
 //enum t_wifi_state { WIFI_DISABLED, WIFI_SCAN, WIFI_CONNECT, WIFI_CONNECT_GOT_DISCONNECT, WIFI_CONNECTED, WIFI_APMODE };
 
-t_wifi_state wifi_state = WIFI_DISABLED;
+volatile t_wifi_state wifi_state = WIFI_DISABLED;
 
 uint32_t netup_time;
 
@@ -3795,12 +3792,30 @@ void wifiConnect(int16_t res) {
 }
 
 void wifiConnectDirect(int16_t index) {
+  // Mode 4 uses networks[1] (index 0 is the fallback AP's identity). If that slot
+  // isn't configured, WiFi.begin("","") would silently connect to nothing; bail
+  // with a clear log instead so the misconfiguration is visible.
+  if (index < 0 || index >= nNetworks || strlen(fetchWifiSSID(index)) == 0) {
+    LOG_E(TAG, "WiFi mode 4 (direct): network slot %d not configured (nNetworks=%d) -- check networks.txt\n", index, nNetworks);
+    return;
+  }
   Serial.println("AP mode 4: trying direct reconnect");
   wifi_state = WIFI_CONNECT;
   WiFi.begin(fetchWifiSSID(index), fetchWifiPw(index));
 }
 
-static int wifi_cto;
+// Time budget for a single background station (re)connect attempt. This is a
+// wall-clock deadline rather than a loop-iteration count: loopWifiBackground()
+// is paced by the RX loop (waitRXcomplete), whose cadence varies with sonde
+// type/signal, so a fixed iteration count gave an unpredictable timeout.
+#define WIFI_CONNECT_TIMEOUT_MS 20000UL
+static unsigned long wifi_connect_deadline;
+
+// Mode 5: after this many failed background scan/connect cycles, give up on a
+// pure-station reconnect and re-raise the AP (AP+STA) so the device stays
+// reachable while it keeps retrying the configured network in the background.
+#define WIFI_MODE5_AP_FALLBACK 3
+static int wifi_reconnect_fails;
 
 // Mode 5 (config.wifi==5) AP fallback: keep the AP up but retry the configured
 // station network in the background (AP+STA). On success the AP is dropped.
@@ -3815,12 +3830,23 @@ void loopWifiBackground() {
   // handle Wifi station mode in background
   if (sonde.config.wifi == 0 || sonde.config.wifi == 2) return; // nothing to do if disabled or access point mode
 
-  if (wifi_state == WIFI_DISABLED) {  // stopped => start can
+  if (wifi_state == WIFI_DISABLED) {  // stopped => start scan/connect
     if (sonde.config.wifi == 4) {  // direct connect to first network, supports hidden SSID
        wifiConnectDirect(1);
-       wifi_cto = 0;
+       wifi_connect_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
+    } else if (sonde.config.wifi == 5 && wifi_reconnect_fails >= WIFI_MODE5_AP_FALLBACK) {
+      // Mode 5: could not restore the station link after several cycles. Bring the
+      // AP back (AP+STA) so the device stays reachable while the apsta background
+      // logic keeps retrying the configured network. (At boot loopWifiScan() does
+      // this fallback; without it a runtime loss loops as pure STA forever and the
+      // device becomes unreachable when the configured network is gone for good.)
+      Serial.println("WiFi mode 5: reconnect failed repeatedly -- re-raising AP");
+      wifi_reconnect_fails = 0;
+      startAP();
+      enableNetwork(true);
     } else {
       Serial.println("WiFi start scan");
+      if (sonde.config.wifi == 5) wifi_reconnect_fails++;
       wifi_state = WIFI_SCAN;
       WiFi.scanNetworks(true); // scan in async mode
     }
@@ -3838,12 +3864,12 @@ void loopWifiBackground() {
     }
     // Scan finished, try to connect
     wifiConnect(res);
-    wifi_cto = 0;
+    wifi_connect_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
   } else if (wifi_state == WIFI_CONNECT) {
-    wifi_cto++;
     if (WiFi.status() == WL_CONNECTED) {
       Serial.println("Wifi is connected\n");
       wifi_state = WIFI_CONNECTED;
+      wifi_reconnect_fails = 0;   // reconnect succeeded; reset the AP-fallback counter
       // update IP in display
       String localIPstr = WiFi.localIP().toString();
       LOG_I(TAG, "IP is %s\n", localIPstr.c_str());
@@ -3851,7 +3877,7 @@ void loopWifiBackground() {
       sonde.updateDisplayIP();
       enableNetwork(true);
     }
-    if (wifi_cto > 20) { // failed, restart scanning
+    else if ((long)(millis() - wifi_connect_deadline) >= 0) { // timed out, restart scanning
       wifi_state = WIFI_DISABLED;
       WiFi.disconnect(true);
     }
@@ -4029,9 +4055,16 @@ void loopWifiScan() {
   case 4:  // direct connect without scan, only first item in network list
     // Mode STN/DIRECT[4]: Connect directly (supports hidden AP)
     {
-      disp.rdis->drawString(0, 0, "WiFi Connect...");
-      disp.rdis->drawString(0, dispys * 2, fetchWifiSSID(1));
-      wifiConnectDirect(1);
+      if (nNetworks < 2 || strlen(fetchWifiSSID(1)) == 0) {
+        // No station network configured for direct connect: fall back to AP so
+        // the user can reach the web UI and fix networks.txt.
+        LOG_E(TAG, "WiFi mode 4 (direct): no station network configured -- falling back to AP\n");
+        abort = 1;
+      } else {
+        disp.rdis->drawString(0, 0, "WiFi Connect...");
+        disp.rdis->drawString(0, dispys * 2, fetchWifiSSID(1));
+        wifiConnectDirect(1);
+      }
     }
     break;
   case 1:  // STATION mode (continue in BG if no connection)
