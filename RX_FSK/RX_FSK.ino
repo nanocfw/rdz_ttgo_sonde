@@ -3668,9 +3668,13 @@ void WiFiEvent(WiFiEvent_t event)
 	break;
       }
       LOG_D(TAG, "Turning off (state is %d)\n", wifi_state);
-      // In AP mode (incl. the AUTO AP+STA fallback) a failed/dropped station
-      // attempt must NOT power off the radio -- that would also kill the AP.
-      if (wifi_state == WIFI_APMODE) break;
+      // Only actually power the radio down when WiFi is configured off (mode 0).
+      // For every other mode we want to stay reachable -- either reconnect as a
+      // station or keep the AP up (incl. the mode-5 AP+STA fallback) -- so leave
+      // the radio on and let loopWifiBackground() drive recovery. Powering off
+      // here (the old behaviour) killed the radio when an established station
+      // link dropped, which is why it never reconnected.
+      if (sonde.config.wifi != 0) break;
       WiFi.mode(WIFI_MODE_NULL);
       break;
     case ARDUINO_EVENT_WIFI_OFF:
@@ -3850,6 +3854,18 @@ void loopWifiBackground() {
     if (wifi_cto > 20) { // failed, restart scanning
       wifi_state = WIFI_DISABLED;
       WiFi.disconnect(true);
+    }
+  } else if (wifi_state == WIFI_CONNECT_GOT_DISCONNECT) {
+    // A disconnect event arrived while a background connect attempt was in
+    // progress. loopWifiScan() retries this inline, but the background loop used
+    // to have no case for it at all -- so a dropped/failed reconnect got parked
+    // here forever and never recovered. Either the link came back on its own, or
+    // we fall back to a fresh scan/connect cycle.
+    if (WiFi.status() == WL_CONNECTED) {
+      wifi_state = WIFI_CONNECT;   // came back; let WIFI_CONNECT finish the handshake
+    } else {
+      WiFi.disconnect(true);
+      wifi_state = WIFI_DISABLED;  // restart scan -> connect
     }
   } else if (wifi_state == WIFI_CONNECTED) {
     //LOG_D(TAG, "status: %d\n", ((WiFiSTAClass)WiFi).status());
