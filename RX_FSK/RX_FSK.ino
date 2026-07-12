@@ -4121,6 +4121,7 @@ void loopWifiScan() {
         if(abort) break;
         WiFi.begin(fetchWifiSSID(connectIndex), fetchWifiPw(connectIndex));
         wifi_state = WIFI_CONNECT;
+        wifi_connect_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;  // arm for a possible BG handoff
       }
     }
     Serial.print(".");
