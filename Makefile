@@ -27,7 +27,7 @@ BUILD_DIR := .pio/build/ttgo-lora32
 OTA_DIR   := ota-dist
 
 .DEFAULT_GOAL := build
-.PHONY: build upload uploadfs buildfs uploadfonts monitor image ota ota-version ota-serve ota-stop clean help
+.PHONY: build upload uploadfs buildfs uploadfonts monitor mock-sondehub image ota ota-version ota-serve ota-stop clean help
 
 # OTA HTTP server (nginx in Docker, see ota-server/). Serves $(OTA_DIR) on port 80.
 OTA_IMAGE     ?= rdz-ota
@@ -51,6 +51,14 @@ uploadfonts: ## Flash the fonts partition (only when a separate fonts partition 
 
 monitor: ## Open the serial monitor (115200 baud)
 	$(PIO) run --target monitor
+
+# Local mock SondeHub API + live dashboard (scripts/mock_sondehub.py) for testing
+# the offline upload cache. Override ports with SH_PORT / SH_WEB_PORT.
+SH_PORT     ?= 8080
+SH_WEB_PORT ?= 8081
+
+mock-sondehub: ## Start the mock SondeHub API + live dashboard (test the offline upload cache)
+	python3 scripts/mock_sondehub.py --port $(SH_PORT) --web-port $(SH_WEB_PORT)
 
 image: buildfs ## Build the merged full-flash firmware-image.bin into $(OTA_DIR) (for USB re-flash downloads)
 	$(MERGE_PATH) $(PIO) run --target firmware

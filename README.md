@@ -114,6 +114,9 @@ Summary by area:
 ### Tooling & build
 - `Makefile` wrapping the common PlatformIO targets.
 - Web-UI preview server (`scripts/preview_server.py`) for editing pages without hardware.
+- Mock SondeHub server (`scripts/mock_sondehub.py`, `make mock-sondehub`): a local stand-in
+  for the SondeHub telemetry API with a live browser dashboard, for exercising the offline
+  upload cache — including its outage/backfill behaviour — without hardware or the real service.
 - The `ttgoconfig` desktop/CLI flasher gains authentication support (`--user`/`--pass`).
 
 ## Installation
