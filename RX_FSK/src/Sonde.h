@@ -142,6 +142,7 @@ typedef struct st_sondeinfo {
 	// statistics
 	uint8_t rxStat[20];
 	uint32_t rxStart;    		// millis() timestamp of continuous rx start
+	uint32_t rxtime;    		// wall-clock (time()) seconds when this frame was received; for upload cache replay
 	uint32_t norxStart;		// millis() timestamp of continuous no rx start
 	uint32_t viewStart;		// millis() timestamp of viewinf this sonde with current display
 	int8_t lastState;		// -1: disabled; 0: norx; 1: rx
@@ -269,6 +270,7 @@ enum { TYPE_TTGO, TYPE_M5_CORE2, TYPE_M5_CORE };
 
 typedef struct st_rdzconfig {
 	int type;			// autodetected type, TTGO or M5_CORE2
+	int cachesize;   // offline upload cache: number of frames to buffer (0 = disabled)
 	// hardware configuration
 	int button_pin;			// PIN port number menu button (+128 for touch mode)
 	int button2_pin;		// PIN port number menu button (+128 for touch mode)

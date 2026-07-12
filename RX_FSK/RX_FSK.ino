@@ -63,6 +63,7 @@
 #endif
 
 #include "src/conn-system.h"
+#include "src/conn-cache.h"
 
 extern SemaphoreHandle_t globalLock;
 
@@ -980,6 +981,7 @@ void setupConfigData() {
 struct st_configitems config_list[] = {
   /* General config settings */
   {"wifi", 0, &sonde.config.wifi},
+  {"cachesize", 0, &sonde.config.cachesize},
   {"debug", 0, &sonde.config.debug},
   {"maxsonde", 0, &sonde.config.maxsonde},
   {"rxlat", -7, &sonde.config.rxlat},
@@ -2772,6 +2774,7 @@ void setup()
 
   Serial.println("Reading initial configuration");
   setupConfigData();    // configuration must be read first due to OLED ports!!!
+  frameCache.begin(sonde.config.cachesize);
   WiFi.setHostname(sonde.config.mdnsname);
   //WiFi.enableIPv6();
 
@@ -3047,6 +3050,44 @@ static const char *action2text(uint8_t action) {
 static char rdzData[RDZ_DATA_LEN];
 static int rdzDataPos = 0;
 
+#define REPLAY_PACE 4            // max backlog frames delivered per connector per tick
+#define MAX_REPLAY_AGE 1800      // seconds; skip buffered frames older than 30 min on replay
+
+// Deliver frames to each ready connector, advancing its cursor.
+// `live`/`liveSeq` are the just-pushed live frame this tick (live==NULL if none):
+// a connector caught up to it receives the REAL SondeInfo (full fidelity: extra/
+// launchsite/rxStat), while a connector that is behind replays the cached copy
+// (which carries only type/freq/afc/rssi/rxtime/d) until it catches up. idleTick()
+// runs only when nothing was delivered, so SondeHub's batching/flush is preserved.
+// Non-network connectors inherit replayReady()==false and are skipped.
+void drainConnectors(SondeInfo *live, uint32_t liveSeq) {
+  if (!frameCache.enabled()) return;
+  uint32_t now = (uint32_t) time(NULL);
+  // Value-initialize: frameCache.get() only fills type/freq/afc/rssi/rxtime/d, so
+  // launchsite/rxStat/extra must start zeroed (empty launchsite, rxStat[0]=0,
+  // extra=NULL) rather than leak stack garbage into replayed payloads.
+  SondeInfo tmp = {};
+  for (int i = 0; connectors[i]; i++) {
+    Conn *c = connectors[i];
+    if (c->replayCursor < frameCache.oldestSeq()) c->replayCursor = frameCache.oldestSeq();
+    int delivered = 0;
+    while (delivered < REPLAY_PACE && c->replayReady() && c->replayCursor < frameCache.headSeq()) {
+      if (live && c->replayCursor == liveSeq) {
+        c->updateSonde(live);         // caught up to the live frame: full fidelity, always fresh
+      } else {
+        if (!frameCache.get(c->replayCursor, &tmp)) { c->replayCursor++; continue; }
+        // Age cap, guarded against a backward clock step (rxtime > now => treat as fresh).
+        uint32_t age = (now >= tmp.rxtime) ? (now - tmp.rxtime) : 0;
+        if (age > MAX_REPLAY_AGE) { c->replayCursor++; continue; }
+        c->updateSonde(&tmp);
+      }
+      c->replayCursor++;
+      delivered++;
+    }
+    if (delivered == 0) c->idleTick();
+  }
+}
+
 void loopDecoder() {
   // Auto-scan mode: hold the peak-detected sonde while it keeps decoding; return
   // to sweeping only after norx_timeout seconds with no valid frame (same knob the
@@ -3140,11 +3181,27 @@ void loopDecoder() {
 
   // wifi active and good packet received => send packet
   SondeInfo *s = &sonde.sondeList[rxtask.receiveSonde];
-  if ((res & 0xff) == 0 && connected) {
-    //Send a packet with position information
-    // first check if ID and position lat+lonis ok
+  bool goodFrame = ((res & 0xff) == 0);
+  bool goodPos = s->d.validID && ((s->d.validPos & 0x03) == 0x03);
+  if (goodFrame) s->rxtime = (uint32_t) time(NULL);   // receipt time; set even if !connected so buffered-during-outage frames replay with correct age/time_received
 
-    if (s->d.validID && ((s->d.validPos & 0x03) == 0x03)) {
+  if (frameCache.enabled()) {
+    // Cache path: buffer frames worth uploading (valid id+position); network
+    // connectors are fed via drainConnectors() (live frame full-fidelity when
+    // caught up, cached copies for backfill). Local sinks are written live.
+    SondeInfo *live = NULL;
+    uint32_t liveSeq = 0;
+    if (goodFrame && goodPos) {
+      liveSeq = frameCache.push(s);   // buffered even if !connected, to cover WiFi outages too
+      live = s;
+    }
+#if FEATURE_SDCARD
+    if (goodFrame && connected) connSDCard.updateSonde(s);
+#endif
+    drainConnectors(live, liveSeq);
+  } else if ((res & 0xff) == 0 && connected) {
+    // Legacy direct dispatch (unchanged behaviour when the cache is disabled).
+    if (goodPos) {
 #if FEATURE_APRS
       connAPRS.updateSonde(s);
 #endif
@@ -3152,13 +3209,12 @@ void loopDecoder() {
       connChasemapper.updateSonde( s );
 #endif
 #if FEATURE_SONDESEEKER
-  connSondeseeker.updateSonde( s );
+      connSondeseeker.updateSonde( s );
 #endif
     }
 #if FEATURE_SONDEHUB
     connSondehub.updateSonde( s );   // invoke sh_send_data....
 #endif
-
 #if FEATURE_MQTT
     connMQTT.updateSonde( s );      // send to MQTT if enabled
 #endif

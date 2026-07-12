@@ -104,6 +104,12 @@ Summary by area:
 - Extensive buffer-bounds and null-check hardening across display, APRS, SondeHub, Wi-Fi,
   config/qrg parsing, GPS/NMEA, GPX export and OTA paths, to prevent overflows and crashes
   under low heap.
+- Offline upload cache: decoded frames are buffered in a shared RAM ring so each network
+  uploader (SondeHub, APRS, MQTT, Chasemapper, SondeSeeker) independently backfills what it
+  missed once its own link recovers — no more lost frames when the internet drops while
+  Wi-Fi stays up. Configurable in the config screen via `cachesize` (frames to buffer;
+  `0` disables, default 120). Live uploads keep full fidelity; only backfilled gap frames
+  omit RS41 calibration fields.
 
 ### Tooling & build
 - `Makefile` wrapping the common PlatformIO targets.

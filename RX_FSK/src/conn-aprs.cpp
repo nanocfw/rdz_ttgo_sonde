@@ -38,6 +38,7 @@ extern const char *version_name;
 extern const char *version_id;
 
 extern WiFiUDP udp;
+extern boolean connected;
 
 void tcpclient_fsm();
 
@@ -172,6 +173,8 @@ void ConnAPRS::updateStation( PosInfo *pi ) {
         Serial.println("");
     }
 }
+
+bool ConnAPRS::replayReady() { return connected; }
 
 static void aprs_beacon(char *bcn, st_aprs *aprs) {
   if(aprs->tcpclient_state == TCS_CONNECTED) {

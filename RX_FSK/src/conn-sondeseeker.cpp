@@ -11,6 +11,7 @@
 
 extern const char *sondeTypeStrSH[];
 extern WiFiUDP udp;
+extern boolean connected;
 
 void ConnSondeseeker::init() {
 }
@@ -45,6 +46,8 @@ void ConnSondeseeker::updateSonde(SondeInfo *si) {
 
 void ConnSondeseeker::updateStation(PosInfo *pi) {
 }
+
+bool ConnSondeseeker::replayReady() { return sonde.config.ss.active && connected; }
 
 // What's the scanner looking at?
 void ConnSondeseeker::updateQRG(int sondeIndex) {

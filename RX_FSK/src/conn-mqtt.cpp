@@ -112,6 +112,10 @@ int MQTT::mqttGate(uint flag){
   return ((sonde.config.mqtt.active & flag) && mqttClient.connected());
 }
 
+bool MQTT::replayReady() {
+    return sonde.config.mqtt.active && mqttClient.connected();
+}
+
 void MQTT::publishLwt(const char *message) {
   char lwt[128];
   snprintf(lwt, sizeof(lwt), "%sstatus", sonde.config.mqtt.prefix);

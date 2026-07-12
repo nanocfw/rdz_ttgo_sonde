@@ -80,7 +80,15 @@ static int _rs_body_lines = NLINES;
 static int _rs_status_line_end = 0;
 static int _content_length = -1;
 static int _body_bytes_seen = 0;
+static int _rs_status_code = -1;    // numeric HTTP status of the current response (e.g. 200, 502)
 
+// Telemetry-batch delivery tracking for at-least-once uploads. When a /sondes/telemetry
+// batch is opened we remember the replay cursor of its first frame. If the batch is not
+// acked with a 2xx (e.g. a proxy 502 during a backend outage) or the connection drops
+// before the ACK, we rewind the cursor to re-send the batch instead of losing it.
+// SondeHub dedups by serial+datetime, so re-sending an already-received batch is harmless.
+static bool sh_batch_pending = false;      // a telemetry batch is in flight (APPENDING/WAITACK)
+static uint32_t sh_batch_start_seq = 0;    // replay cursor of the batch's first frame
 
 /* Process one chunk. Returns 1 if status line started with "HTTP/1" (caller sets IDLE), 0 otherwise. */
 static int _sh_process_response_chunk(const char *buf, int len) {
@@ -97,6 +105,7 @@ static int _sh_process_response_chunk(const char *buf, int len) {
             _content_length = -1;
             _rs_status_line_end = 0;
             _body_bytes_seen = 0;
+            _rs_status_code = -1;
             _rs_current_target->buf[0] = '\0';
         }
         char *cur_buf = _rs_current_target->buf;
@@ -105,8 +114,12 @@ static int _sh_process_response_chunk(const char *buf, int len) {
         char c = buf[i];
         if (_rs_state == _RS_STATUS_LINE) {
             if (c == '\n') {
+                cur_buf[*cur_len] = '\0';   // terminate for strchr/atoi below
                 if (strncmp(cur_buf, "HTTP/1", 6) == 0) {
                     ret = 1;
+                    // parse numeric status code, e.g. "HTTP/1.1 200 OK" -> 200
+                    const char *sp = strchr(cur_buf, ' ');
+                    _rs_status_code = sp ? atoi(sp + 1) : 0;
                     _rs_state = _RS_SKIP_HEADERS;
                     _rs_status_line_end = *cur_len;
                 } else
@@ -201,6 +214,16 @@ void ConnSondehub::updateSonde( SondeInfo *si ) {
     } else {
         sondehub_send_data(si);
     }
+}
+
+bool ConnSondehub::replayReady() {
+    return sonde.config.sondehub.active &&
+           (shclient_state == SH_CONN_IDLE || shclient_state == SH_CONN_APPENDING);
+}
+
+void ConnSondehub::idleTick() {
+    // No frame delivered this tick: run the FSM / finalize the pending HTTP request.
+    updateSonde(NULL);
 }
 
 
@@ -416,13 +439,26 @@ void ConnSondehub::sondehub_client_fsm() {
                         shclient_state = SH_ERROR_RETRY;
                         time_wait_start = 0;
                         shStart = 0;
+                        // Connection dropped before the ACK: re-send the unconfirmed batch.
+                        if (sh_batch_pending) { replayCursor = sh_batch_start_seq; sh_batch_pending = false; }
                         break;
                     } else {
                         // Copy to status
                         int http1_ok = _sh_process_response_chunk(buf, res);
                         if (shclient_state == SH_CONN_WAITACK && http1_ok) {
-                            shclient_state = SH_CONN_IDLE;
-                            time_wait_start = 0;
+                            if (_rs_status_code >= 200 && _rs_status_code < 300) {
+                                // Genuine success: the server accepted the request.
+                                shclient_state = SH_CONN_IDLE;
+                                time_wait_start = 0;
+                                sh_batch_pending = false;   // batch committed; cursor stays advanced
+                            } else {
+                                // Non-2xx (e.g. a proxy 502/504 while the backend is down).
+                                // Previously this was accepted as an ACK and the frames were
+                                // silently dropped; instead treat it as a failure and rewind so
+                                // the batch is re-sent once the link recovers.
+                                LOG_W(TAG, "SH ACK status %d; treating as failure (will retry)\n", _rs_status_code);
+                                goto error;
+                            }
                         }
                         if( shclient_state == SH_CONN_WAITIMPORTRES ) {   // we are waiting for a reply to a sondehub frequency import request
                             int import_res = ShFreqImport::shImportHandleReply(buf, res);
@@ -457,6 +493,8 @@ error:
     shclient_state = SH_ERROR_RETRY;
     time_wait_start = 0;
     shStart = 0;
+    // Any error while a telemetry batch was in flight: rewind so it is re-sent.
+    if (sh_batch_pending) { replayCursor = sh_batch_start_seq; sh_batch_pending = false; }
 }
 
 
@@ -676,6 +714,12 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
 
     gmtime_r(&t, &ts);
 
+    // time_received reflects when WE received the frame (its rxtime), not "now",
+    // so replayed frames report the correct receipt time.
+    struct tm rxinfo;
+    time_t rxt = (s->rxtime != 0) ? (time_t)s->rxtime : now;
+    gmtime_r(&rxt, &rxinfo);
+
     memset(rs_msg, 0, MSG_SIZE);
     w = rs_msg;
 
@@ -701,7 +745,7 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
             "\"frame\": %d,"
             "\"type\": \"%s\",",
             version_name, version_id, conf->callsign,
-            timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+            rxinfo.tm_year + 1900, rxinfo.tm_mon + 1, rxinfo.tm_mday, rxinfo.tm_hour, rxinfo.tm_min, rxinfo.tm_sec,
             manufacturer_string[realtype], s->d.ser,
             ts.tm_year + 1900, ts.tm_mon + 1, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec,
             (float)s->d.lat, (float)s->d.lon, (float)s->d.alt, (float)(s->freq + s->afc / 1e6f), (float)s->d.hs, (float)s->d.vs,
@@ -817,6 +861,11 @@ void ConnSondehub::sondehub_send_data(SondeInfo * s) {
         sondehub_send_next(s, rs_msg, strlen(rs_msg), 1);
         shclient_state = SH_CONN_APPENDING;
         shStart = now;
+        // Remember where this batch starts. drainConnectors advances replayCursor
+        // only AFTER updateSonde() returns, so right now it still points at this
+        // (first) frame's seq — the point to rewind to if the batch is not acked.
+        sh_batch_start_seq = replayCursor;
+        sh_batch_pending = true;
     } else {
         sondehub_send_next(s, rs_msg, strlen(rs_msg), 0);
     }

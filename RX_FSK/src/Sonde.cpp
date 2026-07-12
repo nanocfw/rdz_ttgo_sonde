@@ -370,6 +370,7 @@ void Sonde::defaultConfig() {
 	config.maxsonde=15;
 	config.debug=0;
 	config.wifi=1;
+	config.cachesize = 120;
 	config.display[0]=0;
 	config.display[1]=1;
 	config.display[2]=-1;
