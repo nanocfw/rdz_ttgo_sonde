@@ -3752,6 +3752,15 @@ void WiFiEvent(WiFiEvent_t event)
 }
 
 
+// Time budget for a single station (re)connect attempt. This is a wall-clock
+// deadline rather than a loop-iteration count: loopWifiBackground() is paced by
+// the RX loop (waitRXcomplete), whose cadence varies with sonde type/signal, so
+// a fixed iteration count gave an unpredictable timeout. Armed at every WiFi.begin
+// (wifiConnect/wifiConnectDirect/loopWifiScan) so the background loop always has a
+// valid deadline for a connect attempt handed off to it.
+#define WIFI_CONNECT_TIMEOUT_MS 20000UL
+static unsigned long wifi_connect_deadline;
+
 void wifiConnect(int16_t res) {
   LOG_I(TAG, "WiFi scan result: found %d networks\n", res);
 
@@ -3783,6 +3792,7 @@ void wifiConnect(int16_t res) {
       fetchWifiSSID(bestEntry), fetchWifiPw(bestEntry), bestChannel, bestRSSI);
     wifi_state = WIFI_CONNECT;
     WiFi.begin(fetchWifiSSID(bestEntry), fetchWifiPw(bestEntry), bestChannel, bestBSSID);
+    wifi_connect_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
   } else {
     // rescan
     // wifiStart();
@@ -3802,14 +3812,8 @@ void wifiConnectDirect(int16_t index) {
   Serial.println("AP mode 4: trying direct reconnect");
   wifi_state = WIFI_CONNECT;
   WiFi.begin(fetchWifiSSID(index), fetchWifiPw(index));
+  wifi_connect_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
 }
-
-// Time budget for a single background station (re)connect attempt. This is a
-// wall-clock deadline rather than a loop-iteration count: loopWifiBackground()
-// is paced by the RX loop (waitRXcomplete), whose cadence varies with sonde
-// type/signal, so a fixed iteration count gave an unpredictable timeout.
-#define WIFI_CONNECT_TIMEOUT_MS 20000UL
-static unsigned long wifi_connect_deadline;
 
 // Mode 5: after this many failed background scan/connect cycles, give up on a
 // pure-station reconnect and re-raise the AP (AP+STA) so the device stays
@@ -3832,8 +3836,7 @@ void loopWifiBackground() {
 
   if (wifi_state == WIFI_DISABLED) {  // stopped => start scan/connect
     if (sonde.config.wifi == 4) {  // direct connect to first network, supports hidden SSID
-       wifiConnectDirect(1);
-       wifi_connect_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
+       wifiConnectDirect(1);       // arms wifi_connect_deadline
     } else if (sonde.config.wifi == 5 && wifi_reconnect_fails >= WIFI_MODE5_AP_FALLBACK) {
       // Mode 5: could not restore the station link after several cycles. Bring the
       // AP back (AP+STA) so the device stays reachable while the apsta background
@@ -3863,8 +3866,7 @@ void loopWifiBackground() {
       return;
     }
     // Scan finished, try to connect
-    wifiConnect(res);
-    wifi_connect_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
+    wifiConnect(res);             // arms wifi_connect_deadline on success
   } else if (wifi_state == WIFI_CONNECT) {
     if (WiFi.status() == WL_CONNECTED) {
       Serial.println("Wifi is connected\n");
@@ -4097,6 +4099,9 @@ void loopWifiScan() {
       // TODO: wifi_state is used inconsistently
       wifi_state = WIFI_CONNECT;
       WiFi.begin(fetchWifiSSID(net_index), fetchWifiPw(net_index));
+      // Arm the timeout in case this attempt is still pending when loopWifiScan()
+      // hands off to loopWifiBackground() (mode 1 continues connecting in the BG).
+      wifi_connect_deadline = millis() + WIFI_CONNECT_TIMEOUT_MS;
     } else {
       abort = 2;  // no network found in scan => abort right away
     }

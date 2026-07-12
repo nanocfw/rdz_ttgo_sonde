@@ -34,7 +34,7 @@ extern const char *version_id;
 
 TimerHandle_t mqttReconnectTimer;
 
-extern t_wifi_state wifi_state;
+// wifi_state is declared (volatile) in core.h, which this file includes.
 char time_str[32];
 
 /* Global initalization (on TTGO startup) */
