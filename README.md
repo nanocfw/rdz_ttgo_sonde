@@ -95,6 +95,14 @@ Summary by area:
   (Official vs PU5WDZ) differs from the installed firmware's fork and requires a
   type-to-confirm before switching, so you can't change forks by an accidental tap.
 
+### Notifications
+- **Landing-near-me push notifications** — sends a phone push (via ntfy) when a sonde is
+  descending, below a configurable altitude, and within a configurable distance of the
+  station; the notification links to the SondeHub tracker. Configure under "Sonde landing
+  notification (ntfy)" in the config page. Note: this firmware has no TLS, so the ntfy
+  server must be reached over plain HTTP (`http://ntfy.sh` works; the publish POST is
+  accepted without HTTPS).
+
 ### Receiver / decoding
 - Internal LNA-boost configuration (SX1278 receiver gain).
 - External LNA support: reported RSSI corrected by subtracting the configured external

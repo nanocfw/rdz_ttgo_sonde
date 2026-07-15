@@ -428,6 +428,13 @@ void Sonde::defaultConfig() {
 	config.ss.active = 1;
  	config.ss.port = 62655;
  	strcpy(config.ss.host, "239.255.0.1");
+
+	config.notify.active = 0;
+	config.notify.dist = 10;
+	config.notify.alt = 5;
+	strcpy(config.notify.server, "http://ntfy.sh");
+	config.notify.topic[0] = 0;
+	config.notify.token[0] = 0;
 }
 
 extern struct st_configitems config_list[];

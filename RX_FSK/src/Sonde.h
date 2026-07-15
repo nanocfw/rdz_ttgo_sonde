@@ -241,7 +241,16 @@ struct st_ss {
  	char host[64];
  	int port;
  };
- 
+
+struct st_notify {
+	int  active;        // 0=off, 1=on
+	int  dist;          // horizontal distance threshold, km
+	int  alt;           // altitude threshold, km (alert only below this)
+	char server[96];    // ntfy server base URL, http only (e.g. http://ntfy.sh; no TLS in this fw)
+	char topic[48];     // ntfy topic (publish target = server + "/" + topic)
+	char token[64];     // optional bearer token ("" = none)
+};
+
 struct st_sondehub {
 	int active;
 	int chase;
@@ -360,6 +369,7 @@ typedef struct st_rdzconfig {
 	struct st_cm cm;
 	struct st_sdcard sd;
 	struct st_ss ss;
+	struct st_notify notify;
 } RDZConfig;
 
 

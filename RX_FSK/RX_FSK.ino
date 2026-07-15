@@ -18,6 +18,9 @@
 #include <ESPmDNS.h>
 #include <Ticker.h>
 #include "esp_heap_caps.h"
+#if FEATURE_NOTIFY
+#include <esp_random.h>
+#endif
 //#include <rtc_wdt.h>
 //#include "soc/timer_group_struct.h"
 //#include "soc/timer_group_reg.h"
@@ -52,6 +55,9 @@
 #if FEATURE_MQTT
 #include "src/conn-mqtt.h"
 #endif
+#if FEATURE_NOTIFY
+#include "src/conn-notify.h"
+#endif
 #if FEATURE_SDCARD
 #include "src/conn-sdcard.h"
 #endif
@@ -83,6 +89,9 @@ Conn *connectors[] = { &connSystem,
 #endif
 #if FEATURE_MQTT
 &connMQTT,
+#endif
+#if FEATURE_NOTIFY
+&connNotify,
 #endif
 #if FEATURE_SDCARD
 &connSDCard,
@@ -964,6 +973,56 @@ const char *createSpectrumJson() {
 ///////////////////// Config form
 
 
+#if FEATURE_NOTIFY
+// Auto-provision a stable, unguessable ntfy topic on first boot when none is configured, so
+// the user doesn't have to invent one. Generated once (hardware RNG) and appended to
+// /config.txt so it survives reboots -- a per-boot-random topic would break the phone's
+// subscription on every restart. It then shows in the config form as the topic to subscribe to.
+static void ensureNotifyTopic() {
+  if (sonde.config.notify.topic[0] != 0) return;   // already configured or provisioned
+  static const char alpha[] = "abcdefghijklmnopqrstuvwxyz0123456789";
+  char *t = sonde.config.notify.topic;             // char[48]
+  strcpy(t, "rdzsonde-");
+  int base = strlen(t);
+  for (int i = 0; i < 12; i++) t[base + i] = alpha[esp_random() % 36];
+  t[base + 12] = 0;
+
+  // Persist so the topic survives reboots (a per-boot-random topic would break the phone
+  // subscription). Rewrite config.txt via a temp file + atomic rename, replacing the
+  // existing "notify.topic=" line in place (or appending if none) -- a clean single key,
+  // and no risk of concatenating onto a non-newline-terminated last line.
+  File in = LittleFS.open("/config.txt", "r");
+  File out = LittleFS.open("/config.tmp", "w");
+  if (!in || !out) {
+    if (in) in.close();
+    if (out) { out.close(); LittleFS.remove("/config.tmp"); }
+    LOG_W(TAG, "notify: could not persist generated topic '%s' (will regenerate next boot)\n", t);
+    return;
+  }
+  bool replaced = false;
+  while (in.available()) {
+    String line = readLine(in);                    // trailing \r/\n already stripped
+    const char *p = line.c_str();
+    while (*p == ' ' || *p == '\t') p++;            // match ignoring leading indentation
+    if (strncmp(p, "notify.topic=", 13) == 0) {
+      out.printf("notify.topic=%s\n", t);
+      replaced = true;
+    } else {
+      out.print(line); out.print("\n");
+    }
+  }
+  if (!replaced) out.printf("notify.topic=%s\n", t);
+  in.close();
+  out.close();
+  if (LittleFS.rename("/config.tmp", "/config.txt")) {
+    LOG_I(TAG, "notify: generated ntfy topic '%s'\n", t);
+  } else {
+    LittleFS.remove("/config.tmp");
+    LOG_W(TAG, "notify: generated topic '%s' but failed to persist (will regenerate next boot)\n", t);
+  }
+}
+#endif
+
 void setupConfigData() {
   File file = LittleFS.open("/config.txt", "r");
   if (!file) {
@@ -975,6 +1034,10 @@ void setupConfigData() {
     sonde.setConfig(line.c_str());
   }
   sonde.checkConfig(); // eliminate invalid entries
+  file.close();   // release the read handle before ensureNotifyTopic() may rewrite config.txt
+#if FEATURE_NOTIFY
+  ensureNotifyTopic();
+#endif
 }
 
 
@@ -1060,6 +1123,15 @@ struct st_configitems config_list[] = {
    {"ss.active", -3, &sonde.config.ss.active},
    {"ss.host", 63, &sonde.config.ss.host},
    {"ss.port", 0, &sonde.config.ss.port},
+#endif
+#if FEATURE_NOTIFY
+  /* Sonde landing notification (ntfy) */
+  {"notify.active", -3, &sonde.config.notify.active},
+  {"notify.dist", 0, &sonde.config.notify.dist},
+  {"notify.alt", 0, &sonde.config.notify.alt},
+  {"notify.server", 95, sonde.config.notify.server},
+  {"notify.topic", 47, sonde.config.notify.topic},
+  {"notify.token", 63, sonde.config.notify.token},
 #endif
 #if FEATURE_MQTT
   /* MQTT */
@@ -3210,6 +3282,9 @@ void loopDecoder() {
 #endif
 #if FEATURE_SONDESEEKER
       connSondeseeker.updateSonde( s );
+#endif
+#if FEATURE_NOTIFY
+      connNotify.updateSonde( s );
 #endif
     }
 #if FEATURE_SONDEHUB

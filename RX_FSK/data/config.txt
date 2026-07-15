@@ -172,5 +172,14 @@ ss.active=1
 ss.host=239.255.0.1
 ss.port=62655
 #-------------------------------#
+# Sonde landing notification (ntfy)
+#-------------------------------#
+notify.active=0
+notify.dist=10
+notify.alt=5
+notify.server=http://ntfy.sh
+notify.topic=
+notify.token=
+#-------------------------------#
 # EOF
 #-------------------------------#
