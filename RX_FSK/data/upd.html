@@ -203,6 +203,17 @@ function suffixOf(id) {
 }
 const insSuf = suffixOf(installed);
 
+// Fork origin of a version string. The PU5WDZ fork bakes a fixed "pu5wdz-" prefix into
+// version_id (scripts/ota_version.py); upstream builds (e.g. "dev20260405") don't.
+// Anything without that prefix is treated as the Official fork.
+function forkOf(id) {
+  return /^pu5wdz/i.test((id || "").trim()) ? "PU5WDZ" : "Official";
+}
+const installedFork = forkOf(installed);
+// Which fork each online update button installs. Local-URL/file uploads supply a
+// user-chosen image and are intentionally absent here (no cross-fork gate).
+const BUTTON_FORK = { main: "Official", dev2: "Official", pu5wdz: "PU5WDZ" };
+
 // Two independent questions:
 //  1) Freshness: is a new version available? Compare the FULL version string
 //     (version_id + suffix), NOT just the filesystem suffix -- otherwise two
@@ -319,6 +330,19 @@ document.querySelectorAll('form[action="update.html"]').forEach(form => {
     e.preventDefault();
     const sub = e.submitter || form.querySelector("input[type=submit]");
     if (!sub || sub.disabled) return;
+    const targetFork = BUTTON_FORK[sub.name];   // undefined for local-URL -> no gate
+    if (targetFork && targetFork !== installedFork) {
+      // Cross-fork update: require the user to type the target fork name so a fork
+      // switch can't be triggered by an accidental tap.
+      const word = targetFork.toUpperCase();
+      showPrompt(
+        "This switches your firmware from " + installedFork + " to " + targetFork +
+        " — these are different builds.\nType " + word +
+        " to continue. The device will reboot after updating.",
+        { title: "Switch firmware source?", placeholder: word, confirmWord: targetFork })
+        .then(ok => { if (ok) startServerUpdate(form, sub); });
+      return;
+    }
     showConfirm(sub.value + " now?\nThe device will reboot after updating.")
       .then(ok => { if (ok) startServerUpdate(form, sub); });
   });

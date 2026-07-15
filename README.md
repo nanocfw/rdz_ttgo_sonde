@@ -91,6 +91,9 @@ Summary by area:
 - Upload firmware and filesystem images directly from the update page.
 - Optional PU5WDZ update server plus self-hosted server tooling; `FS_MINOR` auto-bumps
   when the filesystem image content changes; artifacts served from a stable `ota-dist`.
+- **Cross-fork update warning** — the update page detects when a chosen update source
+  (Official vs PU5WDZ) differs from the installed firmware's fork and requires a
+  type-to-confirm before switching, so you can't change forks by an accidental tap.
 
 ### Receiver / decoding
 - Internal LNA-boost configuration (SX1278 receiver gain).

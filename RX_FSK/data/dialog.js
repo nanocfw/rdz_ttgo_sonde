@@ -2,11 +2,12 @@
 //   showAlert(message)    -> Promise            (resolves when dismissed)
 //   showConfirm(message)  -> Promise<boolean>   (true = OK, false = Cancel)
 //   showProgress(message) -> { update(msg), close() }  (buttonless, non-dismissable)
+//   showPrompt(message, opts) -> Promise<boolean>  (opts.confirmWord gates OK)
 // A single overlay element is built on first use and reused. Messages are inserted with
 // textContent (XSS-safe; they may contain user-supplied names) and CSS white-space:pre-line
 // keeps the "\n" line breaks the old alert()/confirm() text relied on.
 (function (global) {
-  var overlay, msgEl, okBtn, cancelBtn, current, spinnerEl, titleEl;
+  var overlay, msgEl, okBtn, cancelBtn, current, spinnerEl, titleEl, inputEl;
 
   function build() {
     overlay = document.createElement('div');
@@ -24,6 +25,10 @@
     titleEl.style.display = 'none';
     msgEl = document.createElement('div');
     msgEl.className = 'modal-msg';
+    inputEl = document.createElement('input');
+    inputEl.type = 'text';
+    inputEl.className = 'modal-input';
+    inputEl.style.display = 'none';   // only shown by showPrompt()
 
     var actions = document.createElement('div');
     actions.className = 'modal-actions';
@@ -41,6 +46,7 @@
     box.appendChild(spinnerEl);
     box.appendChild(titleEl);
     box.appendChild(msgEl);
+    box.appendChild(inputEl);
     box.appendChild(actions);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
@@ -49,7 +55,11 @@
     cancelBtn.addEventListener('click', function () { close(false); });
     document.addEventListener('keydown', function (e) {
       if (!current) return;
-      if (e.key === 'Enter') { e.preventDefault(); close(true); }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (current.isPrompt && !current.matches()) return;
+        close(true);
+      }
       else if (e.key === 'Escape') { e.preventDefault(); close(false); }
     });
   }
@@ -68,6 +78,8 @@
     spinnerEl.style.display = 'none';   // alert/confirm: no spinner/title
     titleEl.style.display = 'none';
     okBtn.style.display = '';           // may have been hidden by a previous showProgress()
+    inputEl.style.display = 'none';   // not a prompt
+    okBtn.disabled = false;           // clear any disable left by a prior showPrompt
     cancelBtn.style.display = isConfirm ? '' : 'none';
     overlay.style.display = 'flex';
     return new Promise(function (resolve) {
@@ -79,11 +91,42 @@
   global.showAlert = function (message) { return open(message, false); };
   global.showConfirm = function (message) { return open(message, true); };
 
+  // Prompt with a text input. opts: { title, placeholder, confirmWord }. When
+  // confirmWord is set, OK stays disabled until the trimmed, case-insensitive input
+  // equals it (a deliberate type-to-confirm gate). Resolves true only on a matching
+  // OK; false on Cancel/Escape. Mirrors showConfirm's boolean-promise shape.
+  global.showPrompt = function (message, opts) {
+    opts = opts || {};
+    if (!overlay) build();
+    spinnerEl.style.display = 'none';
+    if (opts.title) { titleEl.textContent = String(opts.title); titleEl.style.display = ''; }
+    else titleEl.style.display = 'none';
+    msgEl.textContent = message == null ? '' : String(message);
+    inputEl.style.display = '';
+    inputEl.value = '';
+    inputEl.placeholder = opts.placeholder || '';
+    okBtn.style.display = '';
+    cancelBtn.style.display = '';
+    var confirmWord = opts.confirmWord != null ? String(opts.confirmWord).trim().toLowerCase() : null;
+    function matches() {
+      return confirmWord == null || inputEl.value.trim().toLowerCase() === confirmWord;
+    }
+    okBtn.disabled = !matches();
+    inputEl.oninput = function () { okBtn.disabled = !matches(); };
+    overlay.style.display = 'flex';
+    return new Promise(function (resolve) {
+      current = { resolve: resolve, isConfirm: true, isPrompt: true, matches: matches };
+      setTimeout(function () { inputEl.focus(); }, 0);
+    });
+  };
+
   // Buttonless, non-dismissable modal with a spinner for long operations (e.g. a
   // firmware update). current stays null so the Enter/Escape handler ignores it.
   // Returns a handle to update the title/message or close it programmatically.
   global.showProgress = function (message, title) {
     if (!overlay) build();
+    inputEl.style.display = 'none';
+    okBtn.disabled = false;
     current = null;
     spinnerEl.style.display = '';
     if (title) { titleEl.textContent = String(title); titleEl.style.display = ''; }

@@ -39,6 +39,21 @@ body, html {
 	color: #545454;
 	margin: 0 0 1.5em;
 }
+.modal-input {
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+	padding: 0.55em 0.7em;
+	margin: 0 0 1.4em;
+	font-size: 1.05em;
+	border: 1px solid #c9c9c9;
+	border-radius: 0.25em;
+}
+.modal-input:focus {
+	outline: none;
+	border-color: #04AA6D;   /* project green accent */
+	box-shadow: 0 0 0 3px rgba(4, 170, 109, 0.25);
+}
 /* Progress dialog (showProgress): spinner + bold title above the message. */
 .modal-spinner {
 	width: 42px; height: 42px; margin: 0.1em auto 1.1em;
@@ -74,6 +89,11 @@ body, html {
 .modal-btn-cancel:hover { background-color: #5f686f; }
 .modal-btn-cancel:active { background-color: #545c62; }
 .modal-btn-cancel:focus-visible { box-shadow: 0 0 0 3px rgba(110, 120, 129, 0.5); }
+/* Disabled OK button (showPrompt gate: text doesn't yet match confirmWord). Muted
+   green matches .updbtn:disabled; :disabled:hover keeps the hover rule from re-darkening. */
+.modal-btn:disabled { cursor: not-allowed; opacity: 0.7; }
+.modal-btn-primary:disabled,
+.modal-btn-primary:disabled:hover { background-color: #9bbfae; }
 
 @keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
 /* SweetAlert2's signature show animation (swal2-show) */
