@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Manage the firmware version_id for PU5WDZ OTA builds.
+"""Manage the firmware version_id for PY5OL OTA builds.
 
 Two subcommands, both driven by `make ota`:
 
-  bump   Rewrite the `version_id` line in RX_FSK/version.h to "pu5wdz<timestamp>"
+  bump   Rewrite the `version_id` line in RX_FSK/version.h to "py5ol<timestamp>"
          (local time, YYYYMMDDHHMMSS) so every build gets a unique id. Run BEFORE
          the compile so the new id is baked into the binary.
 
@@ -11,7 +11,7 @@ Two subcommands, both driven by `make ota`:
          as A=1..., Number = FS_MINOR) — the string served as update-info.html and
          used by upd.html's compatibility gating.
 
-The version_id prefix is intentionally fixed to "pu5wdz" to identify this fork/server.
+The version_id prefix is intentionally fixed to "py5ol" to identify this fork/server.
 """
 import argparse
 import hashlib
@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 VERSION_H = Path(__file__).resolve().parent.parent / "RX_FSK" / "version.h"
-PREFIX = "pu5wdz-"
+PREFIX = "py5ol-"
 
 VERSION_ID_RE = re.compile(r'(const\s+char\s*\*\s*version_id\s*=\s*")([^"]*)(";)')
 FS_MAJOR_RE = re.compile(r'FS_MAJOR\s*=\s*(\d+)')
@@ -118,7 +118,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("bump", help="rewrite version_id to pu5wdz-<timestamp>").set_defaults(func=cmd_bump)
+    sub.add_parser("bump", help="rewrite version_id to py5ol-<timestamp>").set_defaults(func=cmd_bump)
     sub.add_parser("info", help="print <version_id>-<Letter><Number>").set_defaults(func=cmd_info)
     fsb = sub.add_parser("fsbump", help="bump FS_MINOR if the RX_FSK/data tree changed")
     fsb.add_argument("datadir", help="LittleFS source dir (e.g. RX_FSK/data)")

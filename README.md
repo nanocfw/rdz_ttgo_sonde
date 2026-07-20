@@ -43,9 +43,9 @@ Adding support for LMS6 (see issue #48) and ims100 (see branch ims100) could be 
 but currently I don't have plans to do add this myself. Well-tested pull requests will of
 course be considered for inclusion :-).
 
-## Enhancements in this fork (PU5WDZ)
+## Enhancements in this fork (PY5OL)
 
-This fork (version id `pu5wdz-*`) extends the upstream firmware with a reworked,
+This fork (version id `py5ol-*`) extends the upstream firmware with a reworked,
 multi-user web interface, an auto_rx-style scanner, a browser spectrum plot, richer
 live-map tooling, external-LNA support and a large round of reliability hardening.
 Summary by area:
@@ -89,10 +89,10 @@ Summary by area:
 - Redesigned update page that validates online updates by filesystem version, with
   reboot-aware progress dialogs.
 - Upload firmware and filesystem images directly from the update page.
-- Optional PU5WDZ update server plus self-hosted server tooling; `FS_MINOR` auto-bumps
+- Optional PY5OL update server plus self-hosted server tooling; `FS_MINOR` auto-bumps
   when the filesystem image content changes; artifacts served from a stable `ota-dist`.
 - **Cross-fork update warning** — the update page detects when a chosen update source
-  (Official vs PU5WDZ) differs from the installed firmware's fork and requires a
+  (Official vs PY5OL) differs from the installed firmware's fork and requires a
   type-to-confirm before switching, so you can't change forks by an accidental tap.
 
 ### Notifications

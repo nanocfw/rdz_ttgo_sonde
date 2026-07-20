@@ -115,13 +115,13 @@ extern uint8_t pmu_irq;
 // The web update page (upd.html) picks one via the POST button name; handleUpdatePost
 // sets updateHost/updatePort/updatePrefix accordingly before entering ST_UPDATE.
 const char *updateHostOfficial = "rdzsonde.org";        // main/dev2 branches
-const char *updateHostPu5wdz   = "rdzttgo.nano.dev.br"; // single flat build (prefix "/")
+const char *updateHostPy5ol   = "rdzttgo.nano.dev.br"; // single flat build (prefix "/")
 const char *updateHost = updateHostOfficial;            // active host for execOTA()
 int updatePort = 80;
 
 const char *updatePrefixM = "/main/";
 const char *updatePrefixD = "/dev2/";
-const char *updatePrefixP = "/";                        // pu5wdz flat layout
+const char *updatePrefixP = "/";                        // py5ol flat layout
 const char *updatePrefix = updatePrefixM;
 const char *updateFs = "update.fs.bin";
 const char *updateIno = "update.ino.bin";
@@ -1681,9 +1681,9 @@ const char *handleUpdatePost(AsyncWebServerRequest * request) {
       updatePort = 80;
       updatePrefix = updatePrefixM;
     }
-    else if (param.equals("pu5wdz")) {
-      Serial.println("equals pu5wdz");
-      updateHost = updateHostPu5wdz;
+    else if (param.equals("py5ol")) {
+      Serial.println("equals py5ol");
+      updateHost = updateHostPy5ol;
       updatePort = 80;
       updatePrefix = updatePrefixP;
     }

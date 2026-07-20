@@ -75,22 +75,22 @@
         <tr id="rowDev2"><td>Available (dev2)</td><td>
           <span id="verDev2">(&hellip;checking&hellip;)</span>
           <span id="stDev2" class="upd-status"></span></td></tr>
-        <tr id="rowPu5wdz"><td>Available (PU5WDZ)</td><td>
-          <span id="verPu5wdz">(&hellip;checking&hellip;)</span>
-          <span id="stPu5wdz" class="upd-status"></span></td></tr>
+        <tr id="rowPy5ol"><td>Available (PY5OL)</td><td>
+          <span id="verPy5ol">(&hellip;checking&hellip;)</span>
+          <span id="stPy5ol" class="upd-status"></span></td></tr>
       </table>
 
       <!-- Update server selector. Chooses which host the device downloads from; the
            choice is remembered in localStorage (applyServer). Official uses the built-in
-           rdzsonde.org main/dev2 branches; PU5WDZ uses rdzttgo.nano.dev.br (single build).
+           rdzsonde.org main/dev2 branches; PY5OL uses rdzttgo.nano.dev.br (single build).
            The download host itself is set in firmware (handleUpdatePost) by the button name. -->
       <div class="upd-section" id="server-select">
         <h2>Update server</h2>
         <label><input type="radio" name="updserver" value="official" checked>
           Official (rdzsonde.org)</label>
         &nbsp;&nbsp;
-        <label><input type="radio" name="updserver" value="pu5wdz">
-          PU5WDZ (rdzttgo.nano.dev.br)</label>
+        <label><input type="radio" name="updserver" value="py5ol">
+          PY5OL (rdzttgo.nano.dev.br)</label>
       </div>
 
       <!-- Online update (official): pulls from rdzsonde.org over the device's WiFi. Each
@@ -102,11 +102,11 @@
         <input class="updbtn" id="btnDev2" type="submit" name="dev2" value="Update from Dev2">
       </form>
 
-      <!-- Online update (PU5WDZ): single flat build served from rdzttgo.nano.dev.br. -->
-      <form class="upd-section" id="online-pu5wdz" action="update.html" method="post">
+      <!-- Online update (PY5OL): single flat build served from rdzttgo.nano.dev.br. -->
+      <form class="upd-section" id="online-py5ol" action="update.html" method="post">
         <h2>Online update</h2>
         <p class="upd-note">Downloads from rdzttgo.nano.dev.br over the device's WiFi.</p>
-        <input class="updbtn" id="btnPu5wdz" type="submit" name="pu5wdz" value="Update from PU5WDZ">
+        <input class="updbtn" id="btnPy5ol" type="submit" name="py5ol" value="Update from PY5OL">
       </form>
 
       <!-- Local update from a URL (developer feature; hidden unless enabled) -->
@@ -184,13 +184,13 @@ const isPreview = location.hostname === "localhost" ||
                   location.hostname === "127.0.0.1" || location.port === "8099";
 // Base URL for the browser's version check, per selected server. This is only the
 // UI version fetch — the device itself downloads the firmware over http (no TLS),
-// see handleUpdatePost/execOTA. The PU5WDZ server redirects http->https for
+// see handleUpdatePost/execOTA. The PY5OL server redirects http->https for
 // everything except the .bin files, and a redirect response carries no CORS header,
 // so fetch its update-info.html over https directly (the browser can do TLS; going
 // from an http page to https is allowed, unlike the reverse).
 function hostFor(server) {
   if (isPreview) return "";
-  return server === "pu5wdz" ? "https://rdzttgo.nano.dev.br" : "http://rdzsonde.org";
+  return server === "py5ol" ? "https://rdzttgo.nano.dev.br" : "http://rdzsonde.org";
 }
 const SERVER_KEY = "rdzUpdateServer";   // localStorage key remembering the last choice
 
@@ -203,16 +203,16 @@ function suffixOf(id) {
 }
 const insSuf = suffixOf(installed);
 
-// Fork origin of a version string. The PU5WDZ fork bakes a fixed "pu5wdz-" prefix into
+// Fork origin of a version string. The PY5OL fork bakes a fixed "py5ol-" prefix into
 // version_id (scripts/ota_version.py); upstream builds (e.g. "dev20260405") don't.
 // Anything without that prefix is treated as the Official fork.
 function forkOf(id) {
-  return /^pu5wdz/i.test((id || "").trim()) ? "PU5WDZ" : "Official";
+  return /^py5ol/i.test((id || "").trim()) ? "PY5OL" : "Official";
 }
 const installedFork = forkOf(installed);
 // Which fork each online update button installs. Local-URL/file uploads supply a
 // user-chosen image and are intentionally absent here (no cross-fork gate).
-const BUTTON_FORK = { main: "Official", dev2: "Official", pu5wdz: "PU5WDZ" };
+const BUTTON_FORK = { main: "Official", dev2: "Official", py5ol: "PY5OL" };
 
 // Two independent questions:
 //  1) Freshness: is a new version available? Compare the FULL version string
@@ -240,7 +240,7 @@ function classify(avail) {
 }
 
 // Fetch an "available version" string from a full URL, show it, set its status, and
-// gate its button. Used for both the official main/dev2 branches and the flat PU5WDZ
+// gate its button. Used for both the official main/dev2 branches and the flat PY5OL
 // build (whose update-info.html sits at the server root).
 function checkVersionUrl(url, verEl, stEl, btn) {
   let req = new XMLHttpRequest();
@@ -267,22 +267,22 @@ function checkVersionUrl(url, verEl, stEl, btn) {
 // Show the rows/forms for the chosen server, remember the choice, and (re)run the
 // version check(s) for whatever is now visible.
 function applyServer(server) {
-  const isPu = server === "pu5wdz";
+  const isPu = server === "py5ol";
   document.getElementById("rowMain").style.display   = isPu ? "none" : "";
   document.getElementById("rowDev2").style.display   = isPu ? "none" : "";
-  document.getElementById("rowPu5wdz").style.display = isPu ? "" : "none";
+  document.getElementById("rowPy5ol").style.display = isPu ? "" : "none";
   document.getElementById("online-official").style.display = isPu ? "none" : "";
-  document.getElementById("online-pu5wdz").style.display   = isPu ? "" : "none";
+  document.getElementById("online-py5ol").style.display   = isPu ? "" : "none";
   const r = document.querySelector('input[name=updserver][value="' + server + '"]');
   if (r) r.checked = true;
   try { localStorage.setItem(SERVER_KEY, server); } catch (e) { /* private mode */ }
 
   if (isPu) {
-    // PU5WDZ is a single flat build: update-info.html lives at the server root.
-    checkVersionUrl(hostFor("pu5wdz") + "/update-info.html",
-      document.getElementById("verPu5wdz"),
-      document.getElementById("stPu5wdz"),
-      document.getElementById("btnPu5wdz"));
+    // PY5OL is a single flat build: update-info.html lives at the server root.
+    checkVersionUrl(hostFor("py5ol") + "/update-info.html",
+      document.getElementById("verPy5ol"),
+      document.getElementById("stPy5ol"),
+      document.getElementById("btnPy5ol"));
   } else {
     checkVersionUrl(hostFor("official") + "/main/update-info.html",
       document.getElementById("verMain"),
@@ -296,7 +296,7 @@ function applyServer(server) {
 // Restore the last-used server (default official) and wire the radio buttons.
 let savedServer = "official";
 try { savedServer = localStorage.getItem(SERVER_KEY) || "official"; } catch (e) { /* ignore */ }
-if (savedServer !== "official" && savedServer !== "pu5wdz") savedServer = "official";
+if (savedServer !== "official" && savedServer !== "py5ol") savedServer = "official";
 applyServer(savedServer);
 document.querySelectorAll('input[name=updserver]').forEach(radio =>
   radio.addEventListener("change", () => applyServer(radio.value)));

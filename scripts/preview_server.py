@@ -384,9 +384,9 @@ def make_handler(root):
             # validation can be exercised locally. Installed is teste20260616-C3
             # (see %FULLNAMEID%): main differs by letter (C->D, blocked), dev2 differs
             # by number (3->5, allowed with a "filesystem changes" note).
-            if path == "/update-info.html":   # flat PU5WDZ build info
+            if path == "/update-info.html":   # flat PY5OL build info
                 self._send(200, "text/html",
-                           "<html><body><p>pu5wdz-20260712175225-C3</p></body></html>")
+                           "<html><body><p>py5ol-20260712175225-C3</p></body></html>")
                 return
             if path in ("/main/update-info.html", "/dev2/update-info.html"):
                 ver = "teste20260616-D3" if path.startswith("/main") else "teste20260616-C5"
