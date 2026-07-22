@@ -12,6 +12,7 @@
 #define FEATURE_NOTIFY 1
 #define FEATURE_SDCARD 1
 #define FEATURE_APRS 1
+#define FEATURE_SERIALOUT 1
 
 
 // Additional optional components
@@ -37,5 +38,6 @@
 #define FEATURE_MQTT 0
 #define FEATURE_SDCARD 0
 #define FEATURE_APRS 0
+#define FEATURE_SERIALOUT 0
 #define LEGACY_FONTS_IN_CODEBIN 0
 #endif

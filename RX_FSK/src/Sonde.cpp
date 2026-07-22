@@ -218,6 +218,12 @@ void Sonde::defaultConfig() {
 	config.sd.clk = -1;
 	config.sd.name = 0;
 	config.sd.speed = 4000000;
+	config.serialout.format = 0;      // 0=off (feature disabled by default)
+	config.serialout.txd = 4;         // pre-configured TX pin: GPIO4 is the only free, output-capable,
+	                                  // header-exposed pin on the TTGO LoRa32 T3 (not used by LoRa/OLED/SD/LED,
+	                                  // not strapping/flash/input-only). pinInUse() auto-disables it on boards
+	                                  // that do use GPIO4 (e.g. old v1 / CYD).
+	config.serialout.baud = 9600;
 	config.disptype = 0;
 	config.dispcontrast = -1;
 	config.tft_orient = 1;

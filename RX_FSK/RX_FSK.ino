@@ -61,6 +61,9 @@
 #if FEATURE_SDCARD
 #include "src/conn-sdcard.h"
 #endif
+#if FEATURE_SERIALOUT
+#include "src/conn-serialout.h"
+#endif
 #if FEATURE_APRS
 #include "src/conn-aprs.h"
 #endif
@@ -95,6 +98,9 @@ Conn *connectors[] = { &connSystem,
 #endif
 #if FEATURE_SDCARD
 &connSDCard,
+#endif
+#if FEATURE_SERIALOUT
+&connSerialOut,
 #endif
 NULL };
 
@@ -1153,6 +1159,11 @@ struct st_configitems config_list[] = {
   {"sd.sync", 0, &sonde.config.sd.sync},
   {"sd.name", 0, &sonde.config.sd.name},
   {"sd.speed", 0, &sonde.config.sd.speed},
+#endif
+#if FEATURE_SERIALOUT
+  {"serialout.format", 0, &sonde.config.serialout.format},
+  {"serialout.txd", 0, &sonde.config.serialout.txd},
+  {"serialout.baud", 0, &sonde.config.serialout.baud},
 #endif
   /* Hardware dependeing settings */
   {"disptype", 0, &sonde.config.disptype},
@@ -3036,6 +3047,9 @@ void setup()
 #if FEATURE_SDCARD
   connSDCard.init();
 #endif
+#if FEATURE_SERIALOUT
+  connSerialOut.init();
+#endif
 
   enableLocalUpdates();   // check if local updates from other servers is allowed
 
@@ -3257,6 +3271,10 @@ void loopDecoder() {
   bool goodPos = s->d.validID && ((s->d.validPos & 0x03) == 0x03);
   if (goodFrame) s->rxtime = (uint32_t) time(NULL);   // receipt time; set even if !connected so buffered-during-outage frames replay with correct age/time_received
 
+#if FEATURE_SERIALOUT
+  if (goodFrame && goodPos) connSerialOut.updateSonde(s);
+#endif
+
   if (frameCache.enabled()) {
     // Cache path: buffer frames worth uploading (valid id+position); network
     // connectors are fed via drainConnectors() (live frame full-fidelity when
@@ -3314,6 +3332,9 @@ void loopDecoder() {
 #endif
 #if FEATURE_SDCARD
   connSDCard.updateStation( NULL );
+#endif
+#if FEATURE_SERIALOUT
+  connSerialOut.updateStation( NULL );
 #endif
   // always send data, even if not valid....
   if (rdzclient.connected()) {

@@ -274,6 +274,12 @@ struct st_sdcard {
 	int speed;	/* SPI speed in Hz (0 = library default), e.g. 4000000, 8000000, 16000000 */
 };
 
+struct st_serialout {
+	int format;   // 0=off, 1=NMEA, 2=JSON, 3=CSV, 4=PAYLOAD_SUMMARY
+	int txd;      // TX pin (GPIO); -1 = disabled
+	int baud;     // baud rate, e.g. 9600
+};
+
 // to be extended
 enum { TYPE_TTGO, TYPE_M5_CORE2, TYPE_M5_CORE };
 
@@ -370,6 +376,7 @@ typedef struct st_rdzconfig {
 	struct st_sdcard sd;
 	struct st_ss ss;
 	struct st_notify notify;
+	struct st_serialout serialout;	// local serial position output (Serial1)
 } RDZConfig;
 
 

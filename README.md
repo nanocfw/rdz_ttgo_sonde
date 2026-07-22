@@ -211,6 +211,11 @@ pointing the OTA update page at the PY5OL server.
   for the SondeHub telemetry API with a live browser dashboard, for exercising the offline
   upload cache — including its outage/backfill behaviour — without hardware or the real service.
 
+**Serial data output**
+- **Serial position output** — write decoded sonde position (and the RX station position) to
+  `Serial1`/UART1 on a configurable TX pin and baud rate, in NMEA / JSON / CSV / Chasemapper
+  `PAYLOAD_SUMMARY` format (configurable; disabled by default).
+
 ### Upstream bug fixes
 
 Bugs present in the upstream firmware that this fork fixes:
