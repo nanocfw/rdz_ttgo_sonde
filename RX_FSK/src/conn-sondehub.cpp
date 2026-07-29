@@ -453,9 +453,8 @@ void ConnSondehub::sondehub_client_fsm() {
                                 sh_batch_pending = false;   // batch committed; cursor stays advanced
                             } else {
                                 // Non-2xx (e.g. a proxy 502/504 while the backend is down).
-                                // Previously this was accepted as an ACK and the frames were
-                                // silently dropped; instead treat it as a failure and rewind so
-                                // the batch is re-sent once the link recovers.
+                                // Not an ACK: treat it as a failure and rewind, so the batch
+                                // is re-sent once the link recovers instead of being dropped.
                                 LOG_W(TAG, "SH ACK status %d; treating as failure (will retry)\n", _rs_status_code);
                                 goto error;
                             }

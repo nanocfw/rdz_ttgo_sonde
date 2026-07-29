@@ -5,7 +5,7 @@
 //   showPrompt(message, opts) -> Promise<boolean>  (opts.confirmWord gates OK)
 // A single overlay element is built on first use and reused. Messages are inserted with
 // textContent (XSS-safe; they may contain user-supplied names) and CSS white-space:pre-line
-// keeps the "\n" line breaks the old alert()/confirm() text relied on.
+// keeps the "\n" line breaks the message text relies on.
 (function (global) {
   var overlay, msgEl, okBtn, cancelBtn, current, spinnerEl, titleEl, inputEl;
 

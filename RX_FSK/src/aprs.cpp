@@ -355,7 +355,7 @@ char *aprs_senddata(SondeInfo *si, const char *usercall, const char *objcall, co
 	    strncpy(type, sondeTypeStr[sonde.realType(si)], 11);  type[11]=0; 
         }
 	
-	snprintf(b+strlen(b), sizeof(b)-strlen(b), "%.3fMHz Type=%s ", si->freq, type /* sondeTypeStr[sonde.realType(si)] */ );
+	snprintf(b+strlen(b), sizeof(b)-strlen(b), "%.3fMHz Type=%s ", si->freq, type);
 	if( s->countKT != 0xffff && s->vframe - s->crefKT < 51 ) {
 		snprintf(b+strlen(b), sizeof(b)-strlen(b), "TxOff=%dh%02dm ", s->countKT/3600, (s->countKT-s->countKT/3600*3600)/60);
 	}

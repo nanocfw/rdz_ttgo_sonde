@@ -23,9 +23,9 @@ document.addEventListener("DOMContentLoaded", function(){
         } else {
           urlarg = maps[maptype][1](data.sonde.ser||'');
         }
-        // #00A3D3 is a deliberate raw literal, not an oversight: it's a fixed accent on this
-        // embedded third-party map iframe, not a themed UI element, and no token in the palette
-        // matches this cyan -- it reads acceptably against both light and dark.
+        // #00A3D3 is a raw literal rather than a theme token: it is a fixed accent on this
+        // embedded third-party map iframe, not a themed UI element, and it reads acceptably
+        // against both light and dark.
         iftxt='<iframe src="' + maps[maptype][0] + urlarg + '" style="border:1px solid #00A3D3;border-radius:20px;height:98vh;width:100%"></iframe>';
         document.getElementById('mapframe').innerHTML = iftxt;
      })

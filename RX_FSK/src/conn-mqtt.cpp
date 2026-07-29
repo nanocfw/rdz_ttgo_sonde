@@ -162,9 +162,9 @@ void MQTT::publishUptime()
 
     // maybe TODO: Use dynamic position if GPS is available?
     // rxlat, rxlon only if not empty
-    // Build the JSON incrementally with a running offset. Passing payload as
-    // both destination and a %s source argument (as before) is undefined
-    // behaviour for overlapping copies and could corrupt the message.
+    // Build the JSON incrementally with a running offset. Passing payload as both
+    // destination and a %s source argument would be an undefined overlapping copy
+    // and could corrupt the message.
     int n = snprintf(payload, 256,
         "{\"uptime\": %.1f, \"user\": \"%s\", \"time\": \"%s\",",
         millis() / 1000.0, sonde.config.mqtt.username, time_str );

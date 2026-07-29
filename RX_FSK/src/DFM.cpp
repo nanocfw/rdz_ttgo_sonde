@@ -533,7 +533,7 @@ void DFM::decodeDAT(uint8_t *dat)
 		// and longitude DAT blocks were actually received during this cycle (their
 		// block index depends on posmode). If not, this cycle's vframe advanced without
 		// a fresh fix, so flag the kept position as old (0x80) so the map won't plot a
-		// stale position under a newer frame number. Purely additive: does not touch the
+		// stale position under a newer frame number. Only the 0x80 bit is touched, not the
 		// VALIDPOS low bits used by the display / SondeHub. Cleared once a full fix arrives.
 		{
 			uint16_t latbit, lonbit;

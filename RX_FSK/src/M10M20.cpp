@@ -43,14 +43,13 @@ static void m10m20ResetFEC();
 int M10M20::setup(float frequency, int /*type*/)
 {
 	// The oe5dxl-style error correction below keeps per-byte-position "stable value"
-	// history (fixbytes/fixcnt) for ONE sonde on ONE frequency. These are file-static
-	// and were never reset, so they carried across every frequency/sonde change --
-	// e.g. across every auto-scan trial. With a consistent birdie/spur present, the
-	// repair loop can then "fix" the spur into a CRC-valid frame -> a false lock
-	// (green LED + display wake + return to autoscan, repeating until reboot cleared
-	// the static state). Reset on each tune so every trial/channel starts clean; a
-	// held sonde still accumulates history across frames (setup() is not re-called
-	// per frame while decoding one sonde).
+	// history (fixbytes/fixcnt) for ONE sonde on ONE frequency. The buffers are
+	// file-static, so without this reset they carry across every frequency/sonde
+	// change -- e.g. across every auto-scan trial. With a consistent birdie/spur
+	// present, the repair loop can then "fix" the spur into a CRC-valid frame, i.e.
+	// a false lock that persists until the static state is cleared. Resetting on each
+	// tune gives every trial/channel a clean start; a held sonde still accumulates
+	// history across frames (setup() is not re-called per frame while decoding one sonde).
 	m10m20ResetFEC();
 	M10M20_DBG(Serial.println("Setup sx1278 for M10/M20 sonde"));;
 	if(sx1278.ON()!=0) {

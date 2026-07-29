@@ -187,8 +187,8 @@ fetch('/whoami.json')
 	.then(data => applyAccess(typeof data.level === "number" ? data.level : 2))
 	.catch(() => applyAccess(2));  // on error show all tabs; the firmware still enforces access
 
-// Sessions are stateless JWTs signed with a stable device key, so they survive reboots --
-// no bootID-based cookie clearing here anymore.
+// Sessions are stateless JWTs signed with a stable device key, so they survive reboots and
+// need no bootID-based cookie clearing here.
 
 // Decode the username from a JWT session cookie (payload "sub" claim); null if not present.
 function jwtUser(jwt) {

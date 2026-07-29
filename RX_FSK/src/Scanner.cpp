@@ -230,8 +230,8 @@ void Scanner::scan()
 		if(r>peakres+1) { peakres=r; peakidx=i*scanconfig.SMPL_PIX; }
 		// Accumulate in a local and store scandisp[i] only once, as the finished
 		// average. Writing the running sum into scandisp[] and dividing in a
-		// second pass left a window where the web task (createSpectrumJson) could
-		// read the un-divided sum (~SMPL_PIX times too negative).
+		// second pass would leave a window where the web task (createSpectrumJson)
+		// reads the un-divided sum (~SMPL_PIX times too negative).
 		int sum = r;
 		for(int j=1; j<scanconfig.SMPL_PIX; j++) {
 			r = scanresult[i*scanconfig.SMPL_PIX+j];

@@ -452,7 +452,6 @@ void HTMLSAVEBUTTON_F(char *ptr, int level, const char *footerextra) {
 void HTMLSAVEBUTTON(char *ptr, int level) { HTMLSAVEBUTTON_F(ptr, level, NULL); }
 
 // Custom inline SVG icons (stroke uses currentColor -> inherits the button's white text colour).
-// Backup = arrow-into-tray (download); restore = arrow-out-of-tray (upload).
 // Backup = "Save" (floppy disk); Restore = "Open" (folder) -- the classic save/open pairing.
 #define SVG_BACKUP "<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" " \
   "stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" \
@@ -858,8 +857,8 @@ const char *createStatusForm() {
     }
   }
   // Close the content div and emit the footer as a sibling (full width, pinned at the
-  // bottom) -- same structure as the other forms; the old extra nested .content put the
-  // footer inside the scroll area, so it scrolled and was constrained to the column width.
+  // bottom) -- same structure as the other forms. Nesting it inside .content would put the
+  // footer in the scroll area, so it would scroll and be constrained to the column width.
   strcat(ptr, "</div><div class=\"footer\"><span></span>"
          "<span class=\"ttgoinfo\">rdzTTGOserver ");
   strcat(ptr, version_id);
@@ -3300,7 +3299,7 @@ void loopDecoder() {
 #endif
     drainConnectors(live, liveSeq);
   } else if ((res & 0xff) == 0 && connected) {
-    // Legacy direct dispatch (unchanged behaviour when the cache is disabled).
+    // Direct dispatch, used when the cache is disabled.
     if (goodPos) {
 #if FEATURE_APRS
       connAPRS.updateSonde(s);
@@ -3831,8 +3830,8 @@ void WiFiEvent(WiFiEvent_t event)
       // For every other mode we want to stay reachable -- either reconnect as a
       // station or keep the AP up (incl. the mode-5 AP+STA fallback) -- so leave
       // the radio on and let loopWifiBackground() drive recovery. Powering off
-      // here (the old behaviour) killed the radio when an established station
-      // link dropped, which is why it never reconnected.
+      // here would kill the radio whenever an established station link drops,
+      // leaving no way to reconnect.
       if (sonde.config.wifi != 0) break;
       WiFi.mode(WIFI_MODE_NULL);
       break;
@@ -3917,7 +3916,7 @@ void WiFiEvent(WiFiEvent_t event)
 // Time budget for a single station (re)connect attempt. This is a wall-clock
 // deadline rather than a loop-iteration count: loopWifiBackground() is paced by
 // the RX loop (waitRXcomplete), whose cadence varies with sonde type/signal, so
-// a fixed iteration count gave an unpredictable timeout. Armed at every WiFi.begin
+// a fixed iteration count would give an unpredictable timeout. Armed at every WiFi.begin
 // (wifiConnect/wifiConnectDirect/loopWifiScan) so the background loop always has a
 // valid deadline for a connect attempt handed off to it.
 #define WIFI_CONNECT_TIMEOUT_MS 20000UL
@@ -4046,11 +4045,10 @@ void loopWifiBackground() {
       WiFi.disconnect(true);
     }
   } else if (wifi_state == WIFI_CONNECT_GOT_DISCONNECT) {
-    // A disconnect event arrived while a background connect attempt was in
-    // progress. loopWifiScan() retries this inline, but the background loop used
-    // to have no case for it at all -- so a dropped/failed reconnect got parked
-    // here forever and never recovered. Either the link came back on its own, or
-    // we fall back to a fresh scan/connect cycle.
+    // A disconnect event arrived while a background connect attempt was in progress
+    // (loopWifiScan() retries this inline; the background loop needs its own case,
+    // otherwise a dropped/failed reconnect stays parked here and never recovers).
+    // Either the link came back on its own, or we fall back to a fresh scan/connect cycle.
     if (WiFi.status() == WL_CONNECTED) {
       wifi_state = WIFI_CONNECT;   // came back; let WIFI_CONNECT finish the handshake
     } else {

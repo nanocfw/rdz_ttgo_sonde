@@ -8,9 +8,7 @@
 :root {
   color-scheme: light;
 
-  --bg: #fff;                 /* page background -- today the browser default white.
-                                 NOT #f2f2f2: that value appears in this file only as
-                                 the navbar's TEXT color (see --nav-text). */
+  --bg: #fff;                 /* page background */
   --bg-alt: #f4f4f4;          /* table header / subtle fill */
   --surface: #fff;            /* cards, modals, popups, select options */
   --surface-translucent: rgba(255, 255, 255, 0.8);  /* .leaflet-center over the map */
@@ -25,16 +23,16 @@
   --text-secondary: #444;     /* .system-info paragraphs */
   --text-muted: #777;         /* secondary notes */
   --text-faint: #999;         /* hints, filenames */
-  --option-text: #222;        /* open <select> option list -- NOT #000 */
+  --option-text: #222;        /* open <select> option list */
   --heading: #0F3376;         /* h1 */
   --link: #0000ee;            /* a:link/a:visited */
 
   --border: #ccc;
   --border-soft: #ddd;
   --border-strong: #bbb;
-  --border-input: #c9c9c9;    /* .modal-input, .filebtn -- NOT #bbb */
+  --border-input: #c9c9c9;    /* .modal-input, .filebtn */
   --border-hairline: #e3e3e3; /* upd.html file rows */
-  --table-border: black;      /* the legacy `table, th, td` border -- NOT #bbb */
+  --table-border: black;      /* the legacy `table, th, td` border */
   --panel-hover-bg: #808080;  /* .cfgpanel:hover td */
 
   --field-bg: #fff;
@@ -63,7 +61,7 @@
 
   --nav-bg: #333;
   --nav-text: #f2f2f2;
-  --nav-icon: #fff;           /* .hamburger bars -- NOT #f2f2f2 */
+  --nav-icon: #fff;           /* .hamburger bars */
   --nav-hover-bg: #ddd;
   --nav-hover-text: #000;
   --menu-bg: #3a3a3a;
@@ -350,7 +348,7 @@ td#sfreq {
 
 html {
   font-family: Helvetica;
-  display: block;          /* was inline-block, which broke margin:0 auto centering of forms */
+  display: block;          /* inline-block here would break margin:0 auto centering of forms */
   text-align: left;
 }
 h1{
@@ -392,7 +390,7 @@ h1{
 }
 .iconbtn:hover { background-color: var(--brand-hover); }
 .save {
-  background-color: var(--danger); /* 0F33C6; */
+  background-color: var(--danger);
   border: var(--on-brand);
   border-width: 1;
   color: var(--on-brand);
@@ -623,10 +621,7 @@ h1{
 .usermenu-name {
   display: inline-block;
   max-width: 5em;    /* keeps the group (switch + gap + button) inside #myTopnav's 14em
-                        reserve at the worst case (see the width-budget note below). Now that
-                        the switch is a single 32px icon button rather than the old 52px
-                        track, 6em would also fit (13.625em, ~6px spare) -- not reopened here,
-                        left at 5em since this pass wasn't about the name cap */
+                        reserve at the worst case (see the width-budget note below) */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -756,9 +751,9 @@ h1{
 }
 
 /* Home page: the white panel is the full-width scroll area, so its vertical
-   scrollbar sits at the page's right edge like the other tabs (it used to be a
-   centered max-width box, which put the scrollbar mid-screen). The content is
-   centered into a readable column via .system-info > * instead. */
+   scrollbar sits at the page's right edge like the other tabs -- a centered
+   max-width box would put the scrollbar mid-screen. The content is centered
+   into a readable column via .system-info > * instead. */
 .system-info {
   box-sizing: border-box;
   min-width: 0;
@@ -777,8 +772,8 @@ h1{
 .system-info p, .system-info a,
 .status-table td, .status-table th { overflow-wrap: anywhere; }
 /* Table fills the centered column; styled like the Home status table.
-   margin auto centers it -- overrides table.stat's margin-left/right:0, which was
-   left-aligning the Data (status) tables. */
+   margin auto centers it -- needed to override table.stat's margin-left/right:0,
+   which would otherwise left-align the Data (status) tables. */
 .content table {
   width: 100%;
   border-collapse: collapse;
@@ -868,8 +863,8 @@ h1{
 #addForm input[type="text"], #addForm input[type="password"],
 #loginForm input[type="text"], #loginForm input[type="password"] { width: 16em; max-width: 100%; }
 
-/* Control page: a tidy centered stack of modern buttons. (They were plain grey
-   and, at font-size:4vh, overflowed the centered column and got clipped.) */
+/* Control page: a tidy centered stack of buttons. The clamped font-size keeps them
+   inside the centered column instead of overflowing and being clipped. */
 .content .ctlbtn {
   display: block;
   width: 100%;
@@ -1061,7 +1056,7 @@ h1{
 body, html { color: var(--body-text); }
 
 /* Fields and the legacy tables need explicit token-driven colors: their light
-   appearance used to come from browser defaults, which flip in dark mode. */
+   appearance otherwise comes from browser defaults, which flip in dark mode. */
 .content input[type="text"], .content input[type="password"],
 .content input[type="number"], .content select, .content textarea,
 #addForm input[type="text"], #addForm input[type="password"],
@@ -1072,9 +1067,8 @@ body, html { color: var(--body-text); }
 }
 .tci { background-color: var(--bg); }
 
-/* Generic content-link colour. This lived inside the deleted dark @media block and
-   must stay dark-only: unconditional, it beats .topnav a on source order and makes
-   the light-mode nav tabs illegible. */
+/* Generic content-link colour. Must stay dark-only: unconditional, it beats
+   .topnav a on source order and makes the light-mode nav tabs illegible. */
 :root[data-theme="dark"] a:link,
 :root[data-theme="dark"] a:visited { color: var(--link); }
 @media (prefers-color-scheme: dark) {
@@ -1095,21 +1089,18 @@ body, html { color: var(--body-text); }
    color -- without this, hovering a tab still changes background-color but the text
    stays --nav-text (~1.1:1 against --nav-hover-bg, unreadable). This rule ties the
    plain-tab pin at (0,3,1) and wins by coming after it in source order; the active-tab
-   pin stays (0,4,1) and still beats this on hover, unchanged from before. */
+   pin is (0,4,1) and still beats this on hover. */
 :root .topnav a:hover { color: var(--nav-hover-text); }
 
-/* Leaflet chrome. The deleted ad-hoc dark block styled .leaflet-bar a and the popup
-   wrapper/tip; without a replacement, dark mode leaves white zoom buttons and a white
-   popup shell around an already-dark popup table. These are unconditional and
-   token-driven. In light mode the popup wrapper/tip tokens (#fff bg / #333 text) match
-   Leaflet's own defaults, so those two rules are a no-op there. .leaflet-bar a is NOT a
-   no-op in light: Leaflet's own zoom-glyph color is black, and --text is #333, so this
-   rule deliberately moves the glyphs onto the site's body-text color in light mode too
-   -- an accepted, intentional shift (see the sanctioned-shifts note), not a slip. Both
+/* Leaflet chrome, styled unconditionally from the theme tokens: without these rules dark
+   mode leaves white zoom buttons and a white popup shell around an already-dark popup
+   table. In light mode the popup wrapper/tip tokens (#fff bg / #333 text) match Leaflet's
+   own defaults, so those two rules are a no-op there. .leaflet-bar a is NOT a no-op in
+   light: Leaflet's own zoom-glyph color is black and --text is #333, so this rule
+   deliberately moves the glyphs onto the site's body-text color in light mode too. Both
    rules matter most in dark, where the tokens diverge furthest from Leaflet's defaults.
-   !important is required, not cosmetic: livemap.html loads leaflet.css from the CDN
-   AFTER style.css (livemap.html:7-8), so on equal specificity Leaflet wins -- which is
-   why the block being replaced used !important too. */
+   !important is required, not cosmetic: livemap.html loads leaflet.css from the CDN AFTER
+   style.css (livemap.html:7-8), so on equal specificity Leaflet would win. */
 .leaflet-bar a {
   background-color: var(--surface) !important;
   color: var(--text) !important;
@@ -1136,27 +1127,22 @@ body, html { color: var(--body-text); }
 /* Theme switch (theme.js): a single icon button, sun in light mode / moon in dark mode,
    click flips the theme. On index.html it is the first child of .usermenu (theme.js mounts
    it into #themeToggle) -- switch and button are one flex row, so they sit adjacent by
-   construction regardless of the button's variable width (Login vs. a long username). A
-   fixed offset can't track a variable-width neighbour; that was the earlier, wrong
-   approach -- there is no offset arithmetic left to track. On standalone pages it floats
+   construction regardless of the button's variable width (Login vs. a long username); a
+   fixed offset could not track a variable-width neighbour. On standalone pages it floats
    top-right instead (.themetoggle-floating); livemap.html overrides that further since
    even that corner is occupied there (see the relocation code in livemap.js).
 
-   The only number that still matters here is #myTopnav's reserve (14em, above) against
-   this flex group's own worst-case width, so wrapping tabs never slide under it. The
-   button shrank from the old track-and-knob (52px) to a single 18px icon plus its own
-   6px padding and 1px border, so the group is smaller than it used to be:
+   The one number that matters here is #myTopnav's reserve (14em, above) against this flex
+   group's own worst-case width, so wrapping tabs never slide under it:
      .usermenu-btn chrome = 74px (padding 32 + icon 18 + two 7px gaps + caret 8 + margin 2)
      .usermenu-name max-width 5em @ 17px = 85px       =>  button is 159px wide
      .themetoggle-mount margin-right 10px + switch (18 icon + 12 padding + 2 border) 32px = 42px
      worst case: 159 + 42 = 201px = 12.56em @ 16px root  <  14em reserve (~1.44em / 23px spare)
-   14em is now comfortably more reserve than the group needs (it was ~3px spare before this
-   shrink) -- left alone rather than tightened, since over-reserving a wrap guard is harmless.
    Do not widen .usermenu-name past 5em without re-checking this: 6em would add ~17px, still
-   well inside 14em now, but re-verify rather than assume. On mobile,
-   .usermenu itself shifts to right: 3.4em to clear the hamburger; the group's own width is
-   unchanged, so it still must not grow wide enough to reach the single visible
-   .topnav a.active tab ("Home", ~77px) on a 360px phone. */
+   inside 14em, but re-verify rather than assume. On mobile, .usermenu itself shifts to
+   right: 3.4em to clear the hamburger; the group's own width is unchanged, so it still must
+   not grow wide enough to reach the single visible .topnav a.active tab ("Home", ~77px) on
+   a 360px phone. */
 .themetoggle-mount {
   display: flex;
   align-items: center;

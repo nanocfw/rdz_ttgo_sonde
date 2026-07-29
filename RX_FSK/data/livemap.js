@@ -223,8 +223,8 @@ map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', hre
       // data.res: 0: ok  1: no rx (timeout), 2: crc err, >2 some other error
       // Skip plotting when the firmware flags the position as old (validPos & 0x80):
       // on weak signal a frame number can advance without a fresh fix, and the kept
-      // (older) position must not be plotted as if it were the newest frame. Older
-      // firmware omits validPos -> (undefined & 0x80)==0, so behaviour is unchanged.
+      // (older) position must not be plotted as if it were the newest frame. Firmware
+      // without validPos yields (undefined & 0x80)==0, so nothing is skipped there.
       if ((data.lat && data.lon && data.alt) && (lastframe != 0) && !(data.validPos & 0x80)) {
         var location = [data.lat,data.lon,data.alt];
         if (!marker[data.id]) {
