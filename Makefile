@@ -27,7 +27,7 @@ BUILD_DIR := .pio/build/ttgo-lora32
 OTA_DIR   := ota-dist
 
 .DEFAULT_GOAL := build
-.PHONY: build upload uploadfs buildfs uploadfonts monitor mock-sondehub image ota ota-version ota-serve ota-stop clean help
+.PHONY: build upload uploadfs buildfs uploadfonts monitor mock-sondehub image ota ota-version ota-serve ota-stop test clean help
 
 # OTA HTTP server (nginx in Docker, see ota-server/). Serves $(OTA_DIR) on port 80.
 OTA_IMAGE     ?= rdz-ota
@@ -79,6 +79,26 @@ ota: ota-version build ## Build OTA artifacts (update.ino.bin + update.fs.bin + 
 	@echo "OTA artifacts in $(OTA_DIR):"
 	@echo "  update.ino.bin (app)  +  update.fs.bin (data)  +  update-info.html ($$(cat $(OTA_DIR)/update-info.html))"
 	@echo "Serve this dir over HTTP (make ota-serve) or deploy it to your OTA server."
+
+# Build the two binaries you flash/upload to test, without cutting a release.
+# Three deliberate differences from `ota`:
+#   1. No ota-version dependency, so version.h is left exactly as it is. A test build must
+#      never consume a version number or rewrite the stored ota_fsdata_sha256 — doing so
+#      would make the NEXT real build see unchanged data and skip its FS_MINOR bump.
+#      The version increments when you cut the release with `make ota`, not here.
+#   2. Only the two .bin files. No update-info.html: since the version is deliberately not
+#      stamped, that file would advertise the PREVIOUS release's version alongside these
+#      binaries, and a device comparing against it would draw the wrong conclusion.
+#   3. Files stay in $(BUILD_DIR) and firmware.bin is COPIED, not moved, so $(OTA_DIR) is
+#      untouched (a test run can neither be mistaken for a release nor clobber one) and the
+#      binary is still where `pio` left it for `make upload`.
+# Note ota-serve intentionally does not serve these: $(BUILD_DIR) is recreated by
+# PlatformIO, which swaps the directory inode and would orphan a Docker bind mount.
+test: build ## Build just the two OTA binaries into $(BUILD_DIR) for testing (no version bump)
+	cp $(BUILD_DIR)/firmware.bin $(BUILD_DIR)/update.ino.bin
+	python3 scripts/makefsupdate.py RX_FSK/data > $(BUILD_DIR)/update.fs.bin
+	@echo "Test binaries in $(BUILD_DIR):"
+	@echo "  update.ino.bin (app)  +  update.fs.bin (data)"
 
 ota-serve: ## Build & start the nginx OTA server (serves $(OTA_DIR) on OTA_PORT, default 80)
 	@[ -f $(OTA_DIR)/update.ino.bin ] || { echo "No OTA artifacts in $(OTA_DIR) — run 'make ota' first."; exit 1; }
