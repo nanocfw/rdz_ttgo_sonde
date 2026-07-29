@@ -35,14 +35,17 @@ $(document).ready(function(){
   });
   
   var basemap;
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  var themeDark = (window.rdzTheme && window.rdzTheme.effective() === 'dark')
+               || (!window.rdzTheme && window.matchMedia
+                   && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  if (themeDark) {
     map.addLayer(osmdark);
     basemap='osmdark';
   } else {
     map.addLayer(osmlight);
     basemap='osmlight';
   }
-  
+
   basemap_change = function () {
     if (basemap == 'osmlight') {
       map.removeLayer(osmlight);
@@ -63,7 +66,20 @@ $(document).ready(function(){
     }
   };
 
-  if(mapcenter) map.setView(mapcenter, 5); 
+  /* Follow the theme switch, but only while the user is on a plain OSM layer --
+     if they deliberately picked opentopo or esri, leave their choice alone. */
+  if (window.rdzTheme) {
+    window.rdzTheme.onChange(function (theme) {
+      var want = (theme === 'dark') ? 'osmdark' : 'osmlight';
+      if (basemap === want) return;
+      if (basemap !== 'osmlight' && basemap !== 'osmdark') return;
+      map.removeLayer(basemap === 'osmlight' ? osmlight : osmdark);
+      map.addLayer(want === 'osmdark' ? osmdark : osmlight);
+      basemap = want;
+    });
+  }
+
+  if(mapcenter) map.setView(mapcenter, 5);
   else map.setView([51.163361,10.447683], 5); // Mitte DE
 
 var reddot = '<span class="ldot rbg"></span>';
@@ -135,8 +151,23 @@ map.addControl(new L.Control.Button([
 
 map.addControl(new L.Control.Button([ { position:'topright', text: '⚙️', href: 'javascript:show_settings();' } ]));
 
-  
-    
+  /* The floating fallback would sit on top of Leaflet's own controls: every corner of this map
+     is occupied (back/zoom/basemap topleft, status/balloon/settings topright, scale bottomleft,
+     attribution bottomright). Hand the switch to Leaflet's control layout instead, so it is
+     placed in flow below the top-right stack and cannot overlap anything. */
+  var themeSw = document.getElementById('themeSwitch');
+  var trCorner = document.querySelector('#map .leaflet-control-container .leaflet-top.leaflet-right');
+  if (themeSw && trCorner) {
+    themeSw.classList.remove('themetoggle-floating');
+    var themeBox = L.DomUtil.create('div', 'leaflet-control');
+    themeBox.appendChild(themeSw);
+    trCorner.appendChild(themeBox);
+    L.DomEvent.disableClickPropagation(themeBox);
+    L.DomEvent.disableScrollPropagation(themeBox);
+  }
+
+
+
   show = function(e,p) {
     if (p == 'landing') { get_predict(last_data); }
     if (e) {

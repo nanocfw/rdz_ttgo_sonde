@@ -92,6 +92,8 @@ CONTROL_EXTRA = [
 
 
 _HEAD = ('<!DOCTYPE html><html><head><meta charset="UTF-8">'
+         '<meta name="color-scheme" content="light dark">'
+         '<script src="theme.js"></script>'
          '<link rel="stylesheet" type="text/css" href="style.css"></head>')
 
 
@@ -247,6 +249,8 @@ def render_control_page(version_id, level=2):
     )
     return (
         '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+        '<meta name="color-scheme" content="light dark">'
+        '<script src="theme.js"></script>'
         '<link rel="stylesheet" type="text/css" href="style.css">'
         + script +
         '</head>'
@@ -258,6 +262,8 @@ def render_control_page(version_id, level=2):
     )
 
 STUB_TEMPLATE = """<!DOCTYPE html><html><head><meta charset="UTF-8">
+<meta name="color-scheme" content="light dark">
+<script src="theme.js"></script>
 <link rel="stylesheet" type="text/css" href="style.css"></head>
 <body><div class="wrapper"><div class="content" style="padding:2em">
 <h2>{title}</h2>

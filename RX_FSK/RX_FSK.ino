@@ -415,7 +415,9 @@ void setupChannelList() {
 // (max-age) as a network-stack workaround, so the query string is what busts that cache on update.
 void HTMLHEAD_V(char *ptr) {
   sprintf(ptr, "<!DOCTYPE html><html><head> <meta charset=\"UTF-8\"> "
-               "<link rel=\"stylesheet\" type=\"text/css\" href=\"style.css?v=%s\">", version_id);
+               "<meta name=\"color-scheme\" content=\"light dark\"> "
+               "<script src=\"theme.js?v=%s\"></script> "
+               "<link rel=\"stylesheet\" type=\"text/css\" href=\"style.css?v=%s\">", version_id, version_id);
 }
 void HTMLBODY_OS(char *ptr, const char *which, const char *onsubmit) {
   strcat(ptr, "<body><form class=\"wrapper\" action=\"");
@@ -1658,7 +1660,11 @@ const char *handleEditPost(AsyncWebServerRequest * request) {
 // will be removed. its now in data/upd.html (for GET; POST to update.html still handled here)
 const char *createUpdateForm(boolean run) {
   char *ptr = message;
-  sprintf(ptr, "<!DOCTYPE html><html><head><link rel=\"stylesheet\" type=\"text/css\" href=\"style.css?v=%s\"></head><body><form action=\"update.html\" method=\"post\">", version_id);
+  sprintf(ptr, "<!DOCTYPE html><html><head>"
+               "<meta name=\"color-scheme\" content=\"light dark\">"
+               "<script src=\"theme.js?v=%s\"></script>"
+               "<link rel=\"stylesheet\" type=\"text/css\" href=\"style.css?v=%s\"></head>"
+               "<body><form action=\"update.html\" method=\"post\">", version_id, version_id);
   if (run) {
     strcat(ptr, "<p>Doing update, wait until reboot</p>");
   } else {
@@ -2044,6 +2050,10 @@ void SetupAsyncServer() {
   });
   server.on("/logout", HTTP_GET, [](AsyncWebServerRequest * request) {
     handleLogout(request);
+  });
+
+  server.on("/sdfiles.html", HTTP_GET, [](AsyncWebServerRequest * request) {
+    request->send(LittleFS, "/sdfiles.html", String(), false, processor);
   });
 
   server.on("/users.html", HTTP_GET, [](AsyncWebServerRequest * request) {

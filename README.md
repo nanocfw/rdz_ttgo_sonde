@@ -151,6 +151,8 @@ pointing the OTA update page at the PY5OL server.
 - Login returns you to the last page/tab and survives a device reboot.
 - Upload/download of `config.txt` and `qrg.txt`, plus confirmation for destructive
   actions (Format SD, Reboot).
+- **Dark mode for the web UI** — follows the OS by default, falls back to dark between 20:00 and
+  08:00, and a sun/moon switch in the nav pins an explicit choice per browser.
 
 **Live map**
 - Restores the last sonde and its flight track from browser session storage after a
