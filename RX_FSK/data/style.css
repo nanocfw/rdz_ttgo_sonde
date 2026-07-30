@@ -190,6 +190,8 @@ body, html {
 }
 @media (prefers-reduced-motion: reduce) {
 	.modal-overlay, .modal-box, .modal-spinner { animation: none; }
+	/* Still a visible ring, just not spinning. */
+	.tabcontent.loading::after { animation: none; }
 }
 
 .system-info {
@@ -301,7 +303,18 @@ table.stat {
 }
 .tci {
   flex-grow: 1; border: none; margin: 0; padding: 0; overflow-y: auto;
+  /* Hidden until the frame's own document has loaded and themed itself (index.html
+     adds .loaded on the iframe's load event). A frame that is still blank has no
+     data-theme and no style.css, so its color scheme resolves light; when that
+     differs from the embedder's (dark UI over a light OS preference) the browser
+     keeps the frame's canvas opaque and paints it white, over the background-color
+     below -- which is why that rule alone cannot cover the gap. Uncached, the gap
+     lasts a whole qrg.html + style.css fetch from the device.
+     visibility, not display: the flex box keeps its size, so revealing the frame
+     does not reflow the tab. */
+  visibility: hidden;
 }
+.tci.loaded { visibility: visible; }
 .footer {
  background-color: var(--nav-bg);
  display: flex;
@@ -344,6 +357,22 @@ td#sfreq {
 	border-top: none;
 	flex-direction: column;
 	overflow: auto;
+	position: relative;   /* containing block for the loading spinner below */
+}
+/* Loading affordance for the tabs that are iframes: the frame is hidden until it has
+   themed itself (see .tci), which without this leaves an empty panel for as long as the
+   device takes to render the page -- clearly noticeable on real hardware. index.html adds
+   .loading when it navigates a frame and drops it in the frame's load handler.
+   Absolutely positioned, so it centres over the panel instead of being laid out after the
+   hidden frame, which already fills the column. Same geometry/animation as .modal-spinner:
+   42px content box + 4px border = 50px, hence the -25px offsets. */
+.tabcontent.loading::after {
+	content: "";
+	position: absolute;
+	top: 50%; left: 50%;
+	width: 42px; height: 42px; margin: -25px 0 0 -25px;
+	border: 4px solid var(--spinner-track); border-top-color: var(--brand);
+	border-radius: 50%; animation: modalSpin 0.9s linear infinite;
 }
 
 html {

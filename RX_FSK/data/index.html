@@ -136,9 +136,13 @@ function selTab(evt, id) {
 	for(i=0; i<tabcontent.length; i++) {
 		tabcontent[i].style.display = "none";
 		var link = tabcontent[i].dataset.src;
-		if(link) {
+		// Skip the tab being opened: it is navigated below, and blanking it first would
+		// fire a load event for about:blank that reveals the still-empty frame.
+		if(link && tabcontent[i].id != id) {
 			var iframe = tabcontent[i].getElementsByTagName("iframe")[0];
+			iframe.classList.remove("loaded");
 			iframe.setAttribute("src", "");
+			tabcontent[i].classList.remove("loading");   // abandoned mid-load: start clean next time
 		}
 	}
 	tablinks=document.getElementsByClassName("tablinks");
@@ -152,11 +156,33 @@ function selTab(evt, id) {
 	var link = act.dataset.src;
 	if(link) {
 		var iframe = act.getElementsByTagName("iframe")[0];
+		// Hide the frame for this navigation and let its own load event reveal it
+		// (.tci is visibility:hidden until .loaded), showing a spinner meanwhile.
+		// Setting src always navigates, even to the same URL, so re-clicking the
+		// active tab still reloads it.
+		iframe.classList.remove("loaded");
+		act.classList.add("loading");
 		iframe.setAttribute("src", link);
 	}
 	var x = document.getElementById("myTopnav");
     x.className = "topnav";
 }
+// Reveal each tab frame only once its own document has loaded and applied the theme
+// (.tci stays visibility:hidden until .loaded -- see style.css). The about:blank that
+// src="" produces is deliberately ignored: an empty frame carries no data-theme and no
+// stylesheet, so it would show as a white rectangle inside the dark UI.
+// Registered here, before the whoami fetch resolves, so it is in place for the first selTab.
+Array.prototype.forEach.call(document.getElementsByClassName("tci"), function(fr) {
+	fr.addEventListener("load", function() {
+		var href = "";
+		try { href = fr.contentWindow.location.href; } catch(e) { href = ""; }
+		if(href && href.indexOf("about:") !== 0) {
+			fr.classList.add("loaded");
+			fr.parentNode.classList.remove("loading");
+		}
+	});
+});
+
 /* Toggle between adding and removing the "responsive" class to topnav when the user clicks on the icon */
 function myFunction() {
   var x = document.getElementById("myTopnav");
