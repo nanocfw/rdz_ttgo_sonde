@@ -3297,6 +3297,11 @@ void loopDecoder() {
 #if FEATURE_SDCARD
     if (goodFrame && connected) connSDCard.updateSonde(s);
 #endif
+#if FEATURE_NOTIFY
+    // Live-only sink, like the SD card above: the alerts are about the sonde in front of you
+    // now, so they must not queue behind a backfill.
+    if (goodFrame && goodPos && connected) connNotify.updateSonde(s);
+#endif
     drainConnectors(live, liveSeq);
   } else if ((res & 0xff) == 0 && connected) {
     // Direct dispatch, used when the cache is disabled.

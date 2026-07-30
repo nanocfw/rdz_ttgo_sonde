@@ -8,7 +8,6 @@
 
 extern const char *sondeTypeStr[];
 extern float calcLatLonDist(float lat1, float lon1, float lat2, float lon2);
-extern boolean connected;
 
 #define NOTIFY_DESCENT_VS (-1.0f)   // m/s; below this counts as descending
 #define NOTIFY_ALT_DROP_M (300.0f)  // m dropped from peak also counts as descending
@@ -134,10 +133,15 @@ void ConnNotify::netsetup() {}
 void ConnNotify::netshutdown() {}
 void ConnNotify::updateStation(PosInfo *pi) {}
 
-// Cache-drain dispatch (drainConnectors) only delivers frames to connectors whose
-// replayReady() is true; mirror the other network connectors so we actually run.
+// Opt out of the cache drain: this connector is a live-only sink, fed the current frame directly
+// like the SD card and the serial output. Backfill has nothing to offer it. A replayed frame
+// arrives as a stack temp with no channel slot, and every per-sonde value the alerts need --
+// peakAlt for the descent signal, the alerted latch, the backoff -- is indexed by slot, so
+// updateSonde() drops those frames. Taking part in the drain would only mean that, while the
+// connector is behind on backfill, it burns its whole quota on frames it discards and never
+// reaches the live one -- delaying an alert or missing it outright.
 bool ConnNotify::replayReady() {
-	return sonde.config.notify.active && sonde.config.notify.topic[0] && connected;
+	return false;
 }
 
 // Announce a sonde the first time it is decoded with a position. The serial is only written
