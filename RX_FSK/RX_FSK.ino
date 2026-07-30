@@ -1132,8 +1132,8 @@ struct st_configitems config_list[] = {
    {"ss.port", 0, &sonde.config.ss.port},
 #endif
 #if FEATURE_NOTIFY
-  /* Sonde landing notification (ntfy) */
-  {"notify.active", -3, &sonde.config.notify.active},
+  /* Sonde notifications (ntfy) */
+  {"notify.active", 0, &sonde.config.notify.active},
   {"notify.dist", 0, &sonde.config.notify.dist},
   {"notify.alt", 0, &sonde.config.notify.alt},
   {"notify.server", 95, sonde.config.notify.server},

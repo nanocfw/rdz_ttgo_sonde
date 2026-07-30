@@ -45,9 +45,90 @@ void ConnNotify::init() {
 	memset(alerted, 0, sizeof(alerted));
 	memset(lastTry, 0, sizeof(lastTry));
 	memset(lastTries, 0, sizeof(lastTries));
+	memset(newSeen, 0, sizeof(newSeen));
+	newSeenPos = 0;
+	lastNewTry = 0;
+	memset(newPending, 0, sizeof(newPending));
+	newPendingTries = 0;
 	for (int i = 0; i <= MAXSONDE; i++) peakAlt[i] = -100000.0f;
 	initialized = true;
 }
+
+bool ConnNotify::newSerialSeen(const char *ser) {
+	for (int i = 0; i < NOTIFY_NEWSEEN; i++)
+		if (newSeen[i][0] && strncmp(newSeen[i], ser, sizeof(newSeen[i])) == 0) return true;
+	return false;
+}
+
+void ConnNotify::rememberNewSerial(const char *ser) {
+	strlcpy(newSeen[newSeenPos], ser, sizeof(newSeen[newSeenPos]));
+	newSeenPos = (newSeenPos + 1) % NOTIFY_NEWSEEN;
+}
+
+// Every exit records "<kind> <ser> <outcome>" in laststatus, so getStatus() says which sonde
+// and which alert kind it refers to. The longest case fits: 5 + 11 + 26 + 2 < 48.
+#define NOTIFY_STATUS(res, fmt, ...) do { \
+		snprintf(laststatus, sizeof(laststatus), "%s %s " fmt, kind, ser, ##__VA_ARGS__); \
+		return (res); \
+	} while (0)
+
+NtfyResult ConnNotify::postNtfy(const char *kind, const char *ser, const char *title,
+                                const char *body, const char *tags, int priority) {
+	bool secure; char host[96]; int port; char basepath[64];
+
+	if (!parseUrl(sonde.config.notify.server, secure, host, sizeof(host), port, basepath, sizeof(basepath)))
+		NOTIFY_STATUS(NTFY_PERMANENT, "bad server url");
+	if (secure) {
+		LOG_W("notify", "https server '%s' not supported (no TLS in firmware); use http://\n",
+		      sonde.config.notify.server);
+		NOTIFY_STATUS(NTFY_PERMANENT, "https unsupported");
+	}
+
+	// Compose full path: basepath (usually "/") + topic, avoiding a double slash.
+	char path[128];
+	if (basepath[strlen(basepath)-1] == '/')
+		snprintf(path, sizeof(path), "%s%s", basepath, sonde.config.notify.topic);
+	else
+		snprintf(path, sizeof(path), "%s/%s", basepath, sonde.config.notify.topic);
+
+	WiFiClient cl;
+	// WiFiClient(=NetworkClient) does NOT override setTimeout, so this hits
+	// Stream::setTimeout, whose unit is MILLISECONDS (it bounds readStringUntil below).
+	// Passing seconds here would give a ~5 ms read window -> the status read times out ->
+	// we report failure -> the (already-delivered) push re-fires. Must be milliseconds.
+	cl.setTimeout(NOTIFY_TIMEOUT_MS);
+
+	if (!cl.connect(host, port))
+		NOTIFY_STATUS(NTFY_TRANSIENT, "connect failed");
+
+	char clickurl[80];
+	snprintf(clickurl, sizeof(clickurl), "https://sondehub.org/%s", ser);
+	cl.printf("POST %s HTTP/1.1\r\n", path);
+	if (port == 80) cl.printf("Host: %s\r\n", host);
+	else            cl.printf("Host: %s:%d\r\n", host, port);   // vhost/proxy needs the port
+	cl.print("Title: "); cl.print(title); cl.print("\r\n");
+	cl.printf("Tags: %s\r\n", tags);
+	cl.printf("Priority: %d\r\n", priority);
+	cl.print("Click: "); cl.print(clickurl); cl.print("\r\n");
+	if (sonde.config.notify.token[0])
+		cl.printf("Authorization: Bearer %s\r\n", sonde.config.notify.token);
+	cl.printf("Content-Length: %d\r\n", (int)strlen(body));
+	cl.print("Connection: close\r\n\r\n");
+	cl.print(body);
+
+	// Read status line (best-effort, bounded by timeout).
+	String status = cl.readStringUntil('\n');
+	cl.stop();
+	// "HTTP/1.x CODE ..." -> extract CODE. 2xx = delivered; 4xx (except 429 rate-limit)
+	// is a permanent client/config error; anything else is transient.
+	int code = 0, sp = status.indexOf(' ');
+	if (sp > 0) code = status.substring(sp + 1).toInt();
+	if (code >= 200 && code < 300) NOTIFY_STATUS(NTFY_OK, "sent");
+	if (code >= 400 && code < 500 && code != 429) NOTIFY_STATUS(NTFY_PERMANENT, "http %d", code);
+	NOTIFY_STATUS(NTFY_TRANSIENT, "http %d", code);
+}
+
+#undef NOTIFY_STATUS
 
 void ConnNotify::netsetup() {}
 void ConnNotify::netshutdown() {}
@@ -59,16 +140,61 @@ bool ConnNotify::replayReady() {
 	return sonde.config.notify.active && sonde.config.notify.topic[0] && connected;
 }
 
+// Announce a sonde the first time it is decoded with a position. The serial is only written
+// into the seen-ring once the push is delivered, so a network outage doesn't burn the alert.
+void ConnNotify::alertNewSonde(SondeInfo *si, const char *ser, float distkm, bool hasdist) {
+	unsigned long nowms = millis();
+	if (lastNewTry != 0 && (nowms - lastNewTry) < NOTIFY_RETRY_MS) return;
+	lastNewTry = nowms;
+
+	char distinfo[24];
+	if (hasdist) snprintf(distinfo, sizeof(distinfo), ", %.1f km away", distkm);
+	else         distinfo[0] = 0;
+
+	uint8_t rt = si->type;
+	char title[80], body[256];
+	snprintf(title, sizeof(title), "New sonde: %s", ser);
+	snprintf(body, sizeof(body),
+	         "%s %s\n%.3f MHz%s, alt %d m, RSSI %.1f dBm\nlat %.4f, lon %.4f",
+	         (rt < NSondeTypes ? sondeTypeStr[rt] : "?"), ser,
+	         si->freq, distinfo, (int)si->d.alt, -si->rssi / 2.0,
+	         si->d.lat, si->d.lon);
+
+	NtfyResult res = postNtfy("new", ser, title, body, "balloon", 3);
+	if (res == NTFY_OK) {
+		rememberNewSerial(ser);
+	} else if (res == NTFY_PERMANENT) {
+		// Give-up budget is per serial, matching what the ring is keyed by: a single counter
+		// would let sondes A..D burn it and then strand E after one failure of its own.
+		if (strncmp(newPending, ser, sizeof(newPending)) != 0) {
+			strlcpy(newPending, ser, sizeof(newPending));
+			newPendingTries = 0;
+		}
+		if (++newPendingTries >= NOTIFY_MAX_TRIES) {
+			rememberNewSerial(ser);   // give up rather than retry an unfixable failure forever
+			newPending[0] = 0;
+			LOG_W("notify", "giving up on new-sonde alert for %s (%s)\n", ser, laststatus);
+		}
+	}
+	// (transient failures: not remembered, not counted -- retried on the next backoff window)
+	LOG_I("notify", "%s\n", laststatus);
+}
+
 void ConnNotify::updateSonde(SondeInfo *si) {
 	if (!sonde.config.notify.active) return;
 	if (sonde.config.notify.topic[0] == 0) return;
 	if (!initialized) init();
 
-	// Replayed cache frames arrive via a stack temp (not a sondeList element), so the
-	// slot falls outside [0,MAXSONDE] and is skipped here on purpose: we only alert on
-	// the live frame, never on backfilled history.
-	int slot = (int)(si - sonde.sondeList);
-	if (slot < 0 || slot > MAXSONDE) return;
+	// Replayed cache frames arrive via a stack temp (drainConnectors), not a sondeList
+	// element, and are skipped here on purpose: we only alert on the live frame, never on
+	// backfilled history. Address equality is what makes that reliable -- deriving the index
+	// as si - sondeList is UB for those temps (pointers into unrelated objects), and a
+	// bounds test on the result only rejects them while the stack and sondeList happen to
+	// sit more than MAXSONDE+1 elements apart in DRAM.
+	int slot = -1;
+	for (int i = 0; i <= MAXSONDE; i++)
+		if (si == &sonde.sondeList[i]) { slot = i; break; }
+	if (slot < 0) return;
 
 	// Identity: ser and id are always written together by the decoders (RS41 sets both
 	// to the same serial; DFM/M10 derive ser from id), so this never flips between two
@@ -98,13 +224,31 @@ void ConnNotify::updateSonde(SondeInfo *si) {
 
 	if (si->d.alt > peakAlt[slot]) peakAlt[slot] = si->d.alt;
 
-	// Station position: GPS if valid, else fixed rxlat/rxlon.
+	// Station position: GPS if valid, else fixed rxlat/rxlon. Without it there is no
+	// distance: the landing alert cannot be evaluated at all, the new-sonde alert just
+	// omits the distance line.
 	float mylat = sonde.config.rxlat, mylon = sonde.config.rxlon;
-	bool valid = !(isnan(mylat) || isnan(mylon));
-	if (gpsPos.valid) { mylat = gpsPos.lat; mylon = gpsPos.lon; valid = true; }
-	if (!valid) return;
+	bool hasdist = !(isnan(mylat) || isnan(mylon));
+	if (gpsPos.valid) { mylat = gpsPos.lat; mylon = gpsPos.lon; hasdist = true; }
+	float distkm = hasdist ? calcLatLonDist(mylat, mylon, si->d.lat, si->d.lon) / 1000.0f : 0.0f;
 
-	float distkm = calcLatLonDist(mylat, mylon, si->d.lat, si->d.lon) / 1000.0f;
+	// Landing goes first and, when it sends, takes this frame's send window: it is the
+	// time-critical alert (the sonde may stop transmitting within the minute) while the
+	// new-sonde push can wait for the next frame. This also keeps at most one blocking
+	// connect+POST per updateSonde() call.
+	bool sent = (sonde.config.notify.active & NOTIFY_LANDING) && hasdist &&
+	            alertLanding(si, ser, slot, distkm);
+
+	// First positioned frame of a serial we have not announced yet. Deliberately not gated
+	// on distance or altitude: the receiver only hears what is in range, so every newly
+	// identified sonde is worth announcing.
+	if (!sent && (sonde.config.notify.active & NOTIFY_NEWSONDE) && !newSerialSeen(ser))
+		alertNewSonde(si, ser, distkm, hasdist);
+}
+
+// Alert on a sonde that is near, low and descending. Returns true when a send was attempted,
+// so the caller can keep the new-sonde push off the same frame.
+bool ConnNotify::alertLanding(SondeInfo *si, const char *ser, int slot, float distkm) {
 	bool near = distkm <= (float)sonde.config.notify.dist;
 	// Trust vs only when its validity bit is set; the altitude drop from peak is the
 	// fallback descent signal when vs is missing/unreliable.
@@ -112,15 +256,15 @@ void ConnNotify::updateSonde(SondeInfo *si) {
 	                  ((peakAlt[slot] - si->d.alt) > NOTIFY_ALT_DROP_M);
 	bool low = si->d.alt < (float)sonde.config.notify.alt * 1000.0f;
 
-	if (!(near && descending && low)) return;
-	if (alerted[slot]) return;
+	if (!(near && descending && low)) return false;
+	if (alerted[slot]) return false;
 
 	// Cross-channel dedup: if this serial was already alerted in another slot (e.g. the
 	// same frequency configured on two channels), don't alert again for it.
 	for (int j = 0; j <= MAXSONDE; j++) {
 		if (j != slot && alerted[j] && strncmp(lastSerial[j], ser, sizeof(lastSerial[j])) == 0) {
 			alerted[slot] = true;
-			return;
+			return false;
 		}
 	}
 
@@ -128,95 +272,39 @@ void ConnNotify::updateSonde(SondeInfo *si) {
 	// unreachable/erroring server would re-run a blocking connect+POST on every frame
 	// (~1/s) while a qualifying sonde is in view, stalling the UI/web loop.
 	unsigned long nowms = millis();
-	if (lastTry[slot] != 0 && (nowms - lastTry[slot]) < NOTIFY_RETRY_MS) return;
+	if (lastTry[slot] != 0 && (nowms - lastTry[slot]) < NOTIFY_RETRY_MS) return false;
 	lastTry[slot] = nowms;
 
-	// Parse server URL and send. Outcomes:
+	// Build body + title. Only include the vertical rate when it's actually valid
+	// (descent may have been detected via the altitude-drop fallback, with vs unset);
+	// printing an invalid vs would show a garbage "descending N m/s".
+	uint8_t rt = si->type;
+	char vsinfo[32];
+	if (VALIDVS(si->d.validPos))
+		snprintf(vsinfo, sizeof(vsinfo), ", %s %.1f m/s",
+		         (si->d.vs < 0 ? "descending" : "climbing"),
+		         (si->d.vs < 0 ? -si->d.vs : si->d.vs));
+	else
+		vsinfo[0] = 0;
+	char title[80], body[256];
+	snprintf(title, sizeof(title), "Sonde landing near: %s", ser);
+	snprintf(body, sizeof(body),
+	         "%s %s\n%.1f km away, alt %d m%s\nlat %.4f, lon %.4f",
+	         (rt < NSondeTypes ? sondeTypeStr[rt] : "?"), ser,
+	         distkm, (int)si->d.alt, vsinfo,
+	         si->d.lat, si->d.lon);
+
+	// Send. Outcomes:
 	//   ok        -> delivered; latch (one alert per sonde).
 	//   permanent -> a failure retrying can't fix (bad/https config, or HTTP 4xx except
 	//                429); counts toward NOTIFY_MAX_TRIES, then we give up.
 	//   transient -> connect failure / 5xx / 429 / timeout; does NOT count -- keep retrying
 	//                on the backoff (bounded anyway by the sonde leaving view), so a WiFi
 	//                outage during descent doesn't permanently burn the alert.
-	bool ok = false, permanent = false;
-	bool secure; char host[96]; int port; char basepath[64];
-	if (!parseUrl(sonde.config.notify.server, secure, host, sizeof(host), port, basepath, sizeof(basepath))) {
-		strlcpy(laststatus, "bad server url", sizeof(laststatus));
-		permanent = true;
-	} else if (secure) {
-		strlcpy(laststatus, "https unsupported (no TLS)", sizeof(laststatus));
-		LOG_W("notify", "https server '%s' not supported (no TLS in firmware); use http://\n",
-		      sonde.config.notify.server);
-		permanent = true;
-	} else {
-		// Compose full path: basepath (usually "/") + topic, avoiding a double slash.
-		char path[128];
-		if (basepath[strlen(basepath)-1] == '/')
-			snprintf(path, sizeof(path), "%s%s", basepath, sonde.config.notify.topic);
-		else
-			snprintf(path, sizeof(path), "%s/%s", basepath, sonde.config.notify.topic);
-
-		// Build body + title. Only include the vertical rate when it's actually valid
-		// (descent may have been detected via the altitude-drop fallback, with vs unset);
-		// printing an invalid vs would show a garbage "descending N m/s".
-		uint8_t rt = si->type;
-		char vsinfo[32];
-		if (VALIDVS(si->d.validPos))
-			snprintf(vsinfo, sizeof(vsinfo), ", %s %.1f m/s",
-			         (si->d.vs < 0 ? "descending" : "climbing"),
-			         (si->d.vs < 0 ? -si->d.vs : si->d.vs));
-		else
-			vsinfo[0] = 0;
-		char title[80], body[256];
-		snprintf(title, sizeof(title), "Sonde landing near: %s", ser);
-		snprintf(body, sizeof(body),
-		         "%s %s\n%.1f km away, alt %d m%s\nlat %.4f, lon %.4f",
-		         (rt < NSondeTypes ? sondeTypeStr[rt] : "?"), ser,
-		         distkm, (int)si->d.alt, vsinfo,
-		         si->d.lat, si->d.lon);
-
-		WiFiClient cl;
-		// WiFiClient(=NetworkClient) does NOT override setTimeout, so this hits
-		// Stream::setTimeout, whose unit is MILLISECONDS (it bounds readStringUntil below).
-		// Passing seconds here would give a ~5 ms read window -> the status read times out ->
-		// ok stays false -> the alert never latches -> the (already-delivered) push re-fires
-		// every frame. Must be milliseconds.
-		cl.setTimeout(NOTIFY_TIMEOUT_MS);
-
-		if (cl.connect(host, port)) {
-			char clickurl[80];
-			snprintf(clickurl, sizeof(clickurl), "https://sondehub.org/%s", ser);
-			cl.printf("POST %s HTTP/1.1\r\n", path);
-			if (port == 80) cl.printf("Host: %s\r\n", host);
-			else            cl.printf("Host: %s:%d\r\n", host, port);   // vhost/proxy needs the port
-			cl.print("Title: "); cl.print(title); cl.print("\r\n");
-			cl.print("Tags: balloon,warning\r\n");
-			cl.print("Priority: 4\r\n");
-			cl.print("Click: "); cl.print(clickurl); cl.print("\r\n");
-			if (sonde.config.notify.token[0])
-				cl.printf("Authorization: Bearer %s\r\n", sonde.config.notify.token);
-			cl.printf("Content-Length: %d\r\n", (int)strlen(body));
-			cl.print("Connection: close\r\n\r\n");
-			cl.print(body);
-			// Read status line (best-effort, bounded by timeout).
-			String status = cl.readStringUntil('\n');
-			cl.stop();
-			// "HTTP/1.x CODE ..." -> extract CODE. 2xx = delivered; 4xx (except 429
-			// rate-limit) is a permanent client/config error; anything else is transient.
-			int code = 0, sp = status.indexOf(' ');
-			if (sp > 0) code = status.substring(sp + 1).toInt();
-			ok = (code >= 200 && code < 300);
-			if (!ok && code >= 400 && code < 500 && code != 429) permanent = true;
-			if (ok) snprintf(laststatus, sizeof(laststatus), "sent %s", ser);
-			else    snprintf(laststatus, sizeof(laststatus), "http %d %s", code, ser);
-		} else {
-			strlcpy(laststatus, "connect failed", sizeof(laststatus));   // transient
-		}
-	}
-
-	if (ok) {
+	NtfyResult res = postNtfy("land", ser, title, body, "balloon,warning", 4);
+	if (res == NTFY_OK) {
 		alerted[slot] = true;   // delivered: one alert per sonde
-	} else if (permanent) {
+	} else if (res == NTFY_PERMANENT) {
 		if (lastTries[slot] < 255) lastTries[slot]++;
 		if (lastTries[slot] >= NOTIFY_MAX_TRIES) {
 			alerted[slot] = true;   // give up on an unfixable failure rather than retry forever
@@ -225,7 +313,8 @@ void ConnNotify::updateSonde(SondeInfo *si) {
 		}
 	}
 	// (transient failures: no latch, no count -- retried on the next backoff window)
-	LOG_I("notify", "%s (%s, %.1fkm)\n", laststatus, ser, distkm);
+	LOG_I("notify", "%s (%.1fkm)\n", laststatus, distkm);
+	return true;
 }
 
 String ConnNotify::getStatus() {

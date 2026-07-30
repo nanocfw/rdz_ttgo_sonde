@@ -194,10 +194,13 @@ pointing the OTA update page at the PY5OL server.
 - Wi-Fi mode 5 (client, or AP + retry keeping the AP up while retrying to connect).
 
 **Notifications**
-- **Landing-near-me push notifications** — sends a phone push (via ntfy) when a sonde is
-  descending, below a configurable altitude, and within a configurable distance of the
-  station; the notification links to the SondeHub tracker. Configure under "Sonde landing
-  notification (ntfy)" in the config page (uses a plain-HTTP ntfy endpoint).
+- **Landing-near-me push notifications** — sends a phone push when a sonde is descending, below
+  a configurable altitude, and within a configurable distance of the station.
+- **New-sonde push notifications** — pushes once per serial the first time a sonde is decoded
+  with a position, with type, frequency, distance and signal strength.
+- Both alerts link to the SondeHub tracker and share one ntfy server, topic and token, set under
+  "Sonde notifications (ntfy)" on the config page (plain-HTTP endpoint — the firmware has no TLS).
+  `notify.active` selects which alerts are sent: 0=off, 1=landing, 2=new sonde, 3=both.
 
 **Offline upload cache**
 - Decoded frames are buffered in a shared RAM ring so each network uploader (SondeHub,

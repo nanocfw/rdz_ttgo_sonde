@@ -243,9 +243,9 @@ struct st_ss {
  };
 
 struct st_notify {
-	int  active;        // 0=off, 1=on
-	int  dist;          // horizontal distance threshold, km
-	int  alt;           // altitude threshold, km (alert only below this)
+	int  active;        // alert bitfield: 0=off, 1=landing near me, 2=new sonde, 3=both
+	int  dist;          // horizontal distance threshold, km (landing alert)
+	int  alt;           // altitude threshold, km (landing alert only below this)
 	char server[96];    // ntfy server base URL, http only (e.g. http://ntfy.sh; no TLS in this fw)
 	char topic[48];     // ntfy topic (publish target = server + "/" + topic)
 	char token[64];     // optional bearer token ("" = none)
